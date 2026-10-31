@@ -156,16 +156,34 @@ async function findDuplicates() {
         loadingText.textContent = 'Connecting & fetching Emby libraries...';
         const libraries = await fetchLibraries();
 
-        let filteredLibraries = libraries;
+        function checkIsTvLib(lib) {
+            const ct = (lib.CollectionType || '').toLowerCase();
+            const nm = (lib.Name || '').toLowerCase();
+            return ct === 'tvshows' || ct === 'series' || ct === 'tv' || 
+                   nm.includes('tv') || nm.includes('series') || nm.includes('show') || nm.includes('anime') || nm.includes('serial');
+        }
+
+        function checkIsMovieLib(lib) {
+            const ct = (lib.CollectionType || '').toLowerCase();
+            const nm = (lib.Name || '').toLowerCase();
+            return ct === 'movies' || ct === 'movie' || ct === 'films' || 
+                   nm.includes('movie') || nm.includes('film') || nm.includes('cinema');
+        }
+
+        let filteredLibraries = [];
         if (libraryType === 'movies') {
-            filteredLibraries = libraries.filter(lib => lib.CollectionType === 'movies');
+            filteredLibraries = libraries.filter(lib => checkIsMovieLib(lib) || (!checkIsTvLib(lib) && !lib.CollectionType));
         } else if (libraryType === 'tvshows') {
-            filteredLibraries = libraries.filter(lib => lib.CollectionType === 'tvshows' || lib.CollectionType === 'series');
+            filteredLibraries = libraries.filter(lib => checkIsTvLib(lib));
+            if (filteredLibraries.length === 0) {
+                filteredLibraries = libraries.filter(lib => !checkIsMovieLib(lib));
+            }
         } else {
-            // All: movies and tvshows
-            filteredLibraries = libraries.filter(lib =>
-                lib.CollectionType === 'movies' || lib.CollectionType === 'tvshows' || lib.CollectionType === 'series'
-            );
+            // All: all video libraries (movies, tv, unclassified, mixed)
+            filteredLibraries = libraries.filter(lib => {
+                const ct = (lib.CollectionType || '').toLowerCase();
+                return ct !== 'music' && ct !== 'books' && ct !== 'photos' && ct !== 'audiobooks';
+            });
         }
 
         if (filteredLibraries.length === 0) {
@@ -180,7 +198,8 @@ async function findDuplicates() {
 
         for (let i = 0; i < filteredLibraries.length; i++) {
             const library = filteredLibraries[i];
-            const isTv = library.CollectionType === 'tvshows' || library.CollectionType === 'series';
+            const isTv = checkIsTvLib(library);
+            const isMovie = checkIsMovieLib(library);
 
             loadingText.textContent = `Scanning library ${i + 1} of ${filteredLibraries.length}: "${library.Name}"...`;
 
@@ -197,7 +216,7 @@ async function findDuplicates() {
                         count: duplicates.length
                     });
                 }
-            } else {
+            } else if (isMovie) {
                 // Movies
                 const movies = await fetchMoviesFromLibrary(library.ItemId);
                 const duplicates = findDuplicatesInMovieLibrary(movies);
@@ -208,6 +227,31 @@ async function findDuplicates() {
                         type: 'movies',
                         duplicateGroups: duplicates,
                         count: duplicates.length
+                    });
+                }
+            } else {
+                // Mixed or Unclassified Library: Scan both Movies and TV Episodes
+                const movies = await fetchMoviesFromLibrary(library.ItemId);
+                const movieDupes = findDuplicatesInMovieLibrary(movies);
+                if (movieDupes.length > 0) {
+                    duplicateResults.push({
+                        libraryId: library.ItemId,
+                        libraryName: `${library.Name} (Movies)`,
+                        type: 'movies',
+                        duplicateGroups: movieDupes,
+                        count: movieDupes.length
+                    });
+                }
+
+                const episodes = await fetchEpisodesFromLibrary(library.ItemId);
+                const tvDupes = findDuplicatesInTvLibrary(episodes);
+                if (tvDupes.length > 0) {
+                    duplicateResults.push({
+                        libraryId: library.ItemId,
+                        libraryName: `${library.Name} (TV Episodes)`,
+                        type: 'tvshows',
+                        duplicateGroups: tvDupes,
+                        count: tvDupes.length
                     });
                 }
             }
@@ -256,7 +300,7 @@ async function fetchMoviesFromLibrary(libraryId) {
 
 // API: Fetch Episodes
 async function fetchEpisodesFromLibrary(libraryId) {
-    const fields = 'Path,SeriesName,SeasonName,IndexNumber,ParentIndexNumber,ProductionYear,MediaSources,Width,Height,Size,Container';
+    const fields = 'Path,SeriesName,SeasonName,IndexNumber,ParentIndexNumber,ProductionYear,MediaSources,Width,Height,Size,Container,SeriesId,SeasonId';
     const response = await embyFetch(`/emby/Items?Recursive=true&ParentId=${libraryId}&IncludeItemTypes=Episode&Fields=${fields}&api_key=${appState.apiKey}`);
     const data = await response.json();
     return data.Items || [];
@@ -393,21 +437,106 @@ function findDuplicatesInMovieLibrary(movies) {
     return duplicateList;
 }
 
+// Helper: Parse Season & Episode from filename or path if Emby metadata is missing
+function parseEpisodeInfoFromPath(filePath) {
+    if (!filePath) return null;
+    const fileName = filePath.split(/[\\/]/).pop() || '';
+
+    // S01E02 or S1E2 or S01.E02
+    let match = fileName.match(/[sS](\d{1,2})[.\-_ ]*[eE](\d{1,3})/);
+    if (match) {
+        return { season: parseInt(match[1], 10), episode: parseInt(match[2], 10) };
+    }
+
+    // 1x02 or 01x02
+    match = fileName.match(/(\d{1,2})x(\d{1,3})/i);
+    if (match) {
+        return { season: parseInt(match[1], 10), episode: parseInt(match[2], 10) };
+    }
+
+    // E02 or EP02
+    match = fileName.match(/(?:^|[.\-_ ])[eE][pP]?(\d{1,3})(?:[.\-_ ]|$)/);
+    if (match) {
+        const sMatch = filePath.match(/[sS](?:eason)?[.\-_ ]*(\d{1,2})/i);
+        const sNum = sMatch ? parseInt(sMatch[1], 10) : 1;
+        return { season: sNum, episode: parseInt(match[1], 10) };
+    }
+
+    return null;
+}
+
+// Helper: Extract Series name from directory structure if missing
+function extractSeriesNameFromPath(filePath) {
+    if (!filePath) return null;
+    const parts = filePath.split(/[\\/]/).filter(Boolean);
+    if (parts.length >= 3) {
+        const parent = parts[parts.length - 2];
+        if (/season|s\d+/i.test(parent) && parts.length >= 4) {
+            return parts[parts.length - 3];
+        }
+        return parent;
+    }
+    return null;
+}
+
+// Helper: Split Directory Path and File Name cleanly
+function splitDirectoryAndFileName(fullPath) {
+    if (!fullPath || fullPath === 'Unknown path') {
+        return { dir: '', file: fullPath || 'Unknown path' };
+    }
+    const lastSlash = Math.max(fullPath.lastIndexOf('/'), fullPath.lastIndexOf('\\'));
+    if (lastSlash === -1) {
+        return { dir: '', file: fullPath };
+    }
+    return {
+        dir: fullPath.substring(0, lastSlash + 1),
+        file: fullPath.substring(lastSlash + 1)
+    };
+}
+
 // Duplicate Detection: TV Series / Episodes
 function findDuplicatesInTvLibrary(episodes) {
     const groups = {};
 
     episodes.forEach(ep => {
-        const seriesName = ep.SeriesName || 'Unknown Series';
-        const season = ep.ParentIndexNumber !== undefined ? ep.ParentIndexNumber : '?';
-        const episodeNum = ep.IndexNumber !== undefined ? ep.IndexNumber : '?';
-        const epName = ep.Name ? ` - ${ep.Name}` : '';
+        let seriesName = ep.SeriesName;
+        let season = ep.ParentIndexNumber;
+        let episodeNum = ep.IndexNumber;
+        const filePath = ep.Path || (ep.MediaSources && ep.MediaSources[0] ? ep.MediaSources[0].Path : '') || '';
 
-        const sPad = String(season).padStart(2, '0');
-        const ePad = String(episodeNum).padStart(2, '0');
-        const key = `${seriesName.trim().toLowerCase()}_s${sPad}e${ePad}`;
+        // If Season or Episode is missing, parse from file path / file name
+        if ((season === undefined || episodeNum === undefined) && filePath) {
+            const parsed = parseEpisodeInfoFromPath(filePath);
+            if (parsed) {
+                if (season === undefined) season = parsed.season;
+                if (episodeNum === undefined) episodeNum = parsed.episode;
+            }
+        }
 
-        const displayTitle = `${seriesName} - S${sPad}E${ePad}${epName}`;
+        // If SeriesName is missing, extract from directory folder name
+        if (!seriesName && filePath) {
+            seriesName = extractSeriesNameFromPath(filePath) || 'Unknown Series';
+        } else if (!seriesName) {
+            seriesName = 'Unknown Series';
+        }
+
+        let key = '';
+        let displayTitle = '';
+
+        if (season !== undefined && episodeNum !== undefined) {
+            const sPad = String(season).padStart(2, '0');
+            const ePad = String(episodeNum).padStart(2, '0');
+            key = `${seriesName.trim().toLowerCase()}_s${sPad}e${ePad}`;
+            const epName = ep.Name ? ` - ${ep.Name}` : '';
+            displayTitle = `${seriesName} - S${sPad}E${ePad}${epName}`;
+        } else {
+            // Unparsed episode: group by series and sanitized file name to avoid grouping all unknown episodes together
+            const baseFileName = filePath ? (filePath.split(/[\\/]/).pop() || '').replace(/\.[^/.]+$/, '').trim().toLowerCase() : '';
+            const epNameClean = (ep.Name || '').trim().toLowerCase();
+            const identifier = baseFileName || epNameClean || ep.Id;
+            key = `${seriesName.trim().toLowerCase()}_raw_${identifier}`;
+            displayTitle = `${seriesName} - ${ep.Name || (filePath ? filePath.split(/[\\/]/).pop() : 'Episode')}`;
+        }
 
         if (!groups[key]) {
             groups[key] = {
@@ -415,6 +544,7 @@ function findDuplicatesInTvLibrary(episodes) {
                 year: ep.ProductionYear,
                 type: 'episode',
                 seriesName: seriesName,
+                seriesId: ep.SeriesId,
                 season: season,
                 episode: episodeNum,
                 primaryItemId: ep.Id,
@@ -456,13 +586,16 @@ function findDuplicatesInTvLibrary(episodes) {
             const uniqueFiles = [];
             const seenPaths = new Set();
             for (const f of group.files) {
-                const pKey = `${f.itemId}_${f.path}`;
+                const normPath = (f.path || '').trim().toLowerCase();
+                const pKey = `${f.itemId}_${normPath}`;
                 if (!seenPaths.has(pKey)) {
                     seenPaths.add(pKey);
                     uniqueFiles.push(f);
                 }
             }
-            if (uniqueFiles.length > 1) {
+            // Only flag as duplicates if there are multiple DIFFERENT physical paths on disk
+            const distinctPaths = new Set(uniqueFiles.map(f => (f.path || '').trim().toLowerCase()));
+            if (uniqueFiles.length > 1 && distinctPaths.size > 1) {
                 group.files = uniqueFiles;
                 duplicateList.push(group);
             }
@@ -532,7 +665,8 @@ function renderDuplicateGroups(groups, libIdx) {
     }
 
     return groups.map((group, groupIdx) => {
-        const posterUrl = `${appState.serverUrl}/emby/Items/${group.primaryItemId}/Images/Primary?maxWidth=150&api_key=${appState.apiKey}`;
+        const posterItemId = (group.type === 'episode' && group.seriesId) ? group.seriesId : group.primaryItemId;
+        const posterUrl = `${appState.serverUrl}/emby/Items/${posterItemId}/Images/Primary?maxWidth=150&api_key=${appState.apiKey}`;
         const proxiedPosterUrl = appState.useCorsProxy ? `${appState.corsProxyUrl}${encodeURIComponent(posterUrl)}` : posterUrl;
         const fallbackIcon = group.type === 'episode' ? '📺' : '🎬';
         const bestIdx = getBestFileIndex(group.files);
@@ -560,15 +694,19 @@ function renderDuplicateGroups(groups, libIdx) {
                         const isBest = (fileIdx === bestIdx && group.files.length > 1);
                         const fileKey = `${libIdx}_${groupIdx}_${fileIdx}`;
                         const isSelected = appState.selectedFiles.has(fileKey);
+                        const pathParts = splitDirectoryAndFileName(file.path);
 
                         return `
                             <div class="file-row ${isSelected ? 'is-selected' : ''}" id="file-${libIdx}-${groupIdx}-${fileIdx}">
                                 <div class="file-info">
-                                    <div style="display:flex; align-items:center; gap:8px;">
-                                        <label class="file-select-checkbox" title="Select for batch delete">
+                                    <div style="display:flex; align-items:flex-start; gap:10px;">
+                                        <label class="file-select-checkbox" title="Select for batch delete" style="margin-top: 3px;">
                                             <input type="checkbox" class="file-checkbox" ${isSelected ? 'checked' : ''} onchange="toggleFileSelection(${libIdx}, ${groupIdx}, ${fileIdx}, this.checked)">
                                         </label>
-                                        <span class="file-path" title="${escapeHtml(file.path)}">📁 ${escapeHtml(file.path)}</span>
+                                        <div class="file-path-wrapper">
+                                            ${pathParts.dir ? `<div class="file-dir-row" title="Folder: ${escapeHtml(pathParts.dir)}"><span class="dir-icon">📂</span> <span class="dir-text">${escapeHtml(pathParts.dir)}</span></div>` : ''}
+                                            <div class="file-name-row" title="File: ${escapeHtml(pathParts.file)}"><span class="file-icon">📄</span> <strong class="file-name-text">${escapeHtml(pathParts.file)}</strong></div>
+                                        </div>
                                     </div>
                                     <div class="file-specs">
                                         ${isBest ? `<span class="spec-badge spec-best">★ Keep (Best)</span>` : ''}
@@ -579,7 +717,7 @@ function renderDuplicateGroups(groups, libIdx) {
                                 </div>
                                 <div class="file-actions">
                                     <button class="btn-secondary btn-sm" onclick="copyFilePath('${encodeURIComponent(file.path)}')">
-                                        📋 Copy
+                                        📋 Copy Path
                                     </button>
                                     <button class="btn-danger btn-sm" onclick="promptDelete(${libIdx}, ${groupIdx}, ${fileIdx})">
                                         🗑️ Delete
