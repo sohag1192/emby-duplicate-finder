@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://sohag1192.github.io/emby-duplicate-finder/sitemap.xml
