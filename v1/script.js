@@ -902,3 +902,25 @@ async function copyFilePath(encodedPath) {
         showToast('File path copied to clipboard!', 'success');
     }
 }
+
+
+// Scroll to Top Handler
+document.addEventListener('DOMContentLoaded', () => {
+    const scrollToTopBtn = document.getElementById('scrollToTopBtn');
+    if (!scrollToTopBtn) return;
+
+    window.addEventListener('scroll', () => {
+        if (window.scrollY > 280) {
+            scrollToTopBtn.classList.add('visible');
+        } else {
+            scrollToTopBtn.classList.remove('visible');
+        }
+    }, { passive: true });
+
+    scrollToTopBtn.addEventListener('click', () => {
+        window.scrollTo({
+            top: 0,
+            behavior: 'smooth'
+        });
+    });
+});

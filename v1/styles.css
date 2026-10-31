@@ -1356,3 +1356,70 @@ footer {
         padding: 10px 8px;
     }
 }
+
+
+/* Scroll to Top Floating Button */
+.scroll-to-top {
+    position: fixed;
+    bottom: 28px;
+    right: 28px;
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(6, 182, 212, 0.95) 0%, rgba(59, 130, 246, 0.95) 100%);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    box-shadow: 0 8px 24px rgba(6, 182, 212, 0.4), 0 0 16px rgba(59, 130, 246, 0.3);
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 15px;
+    font-weight: 700;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(20px) scale(0.85);
+    transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+                transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+                visibility 0.3s,
+                box-shadow 0.25s ease,
+                background 0.25s ease;
+    z-index: 2500;
+    backdrop-filter: blur(8px);
+}
+
+.scroll-to-top.visible {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0) scale(1);
+}
+
+.scroll-to-top:hover {
+    background: linear-gradient(135deg, #22d3ee 0%, #60a5fa 100%);
+    box-shadow: 0 12px 32px rgba(6, 182, 212, 0.65), 0 0 24px rgba(59, 130, 246, 0.5);
+    transform: translateY(-4px) scale(1.08);
+}
+
+.scroll-to-top:active {
+    transform: translateY(0) scale(0.95);
+}
+
+.scroll-to-top .scroll-arrow {
+    line-height: 1;
+    display: inline-block;
+    transition: transform 0.2s ease;
+}
+
+.scroll-to-top:hover .scroll-arrow {
+    transform: translateY(-2px);
+}
+
+@media (max-width: 640px) {
+    .scroll-to-top {
+        bottom: 20px;
+        right: 20px;
+        width: 42px;
+        height: 42px;
+        font-size: 14px;
+    }
+}
