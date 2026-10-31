@@ -7,8 +7,8 @@
 </p>
 
 <p align="center">
-  <a href="https://hitscounter.dev">
-    <img src="https://hitscounter.dev/api/hit?url=https%3A%2F%2Fgithub.com%2Fsohag1192%2Femby-duplicate-finder&label=Visitors&icon=github&color=%2306b6d4" alt="Visitor Count" />
+  <a href="https://github.com/sohag1192/emby-duplicate-finder">
+    <img src="https://komarev.com/ghpvc/?username=sohag1192-emby-duplicate-finder&label=Visitor+Count&color=06b6d4&style=flat-square" alt="Visitor Count" />
   </a>
   <a href="https://github.com/sohag1192/emby-duplicate-finder/stargazers">
     <img src="https://img.shields.io/github/stars/sohag1192/emby-duplicate-finder?style=flat-square&color=yellow" alt="Stars" />

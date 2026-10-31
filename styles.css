@@ -195,9 +195,33 @@ h1 {
 
 .card-title-row {
     display: flex;
+    justify-content: space-between;
     align-items: center;
+    flex-wrap: wrap;
     gap: 12px;
     margin-bottom: 20px;
+}
+
+.card-title-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.card-hits-badge {
+    display: inline-flex;
+    align-items: center;
+}
+
+.card-hits-badge img {
+    height: 22px;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    transition: transform 0.2s ease;
+}
+
+.card-hits-badge img:hover {
+    transform: scale(1.04);
 }
 
 .card-title-row h3 {
