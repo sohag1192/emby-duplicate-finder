@@ -79,6 +79,10 @@ Expand any library to inspect posters, release years, and copy counts.
 - **Quality Specs Comparison**:
   - Visual badges for **4K UHD**, **1080p FHD**, **720p HD**, and **SD**.
   - Precise human-readable file sizes (MB / GB) and video containers (MKV, MP4, etc.).
+- **Smart Select & Batch Deletion**:
+  - **★ Smart Select (Keep Best)**: Automatically scores and identifies the highest resolution (4K > 1080p > 720p > SD) and highest bitrate/size copy, pins it with a green `★ Keep (Best)` badge, and automatically selects all extra redundant copies for one-click deletion.
+  - **Checkboxes & Batch Actions**: Select specific files, **Select All**, or **Deselect All**.
+  - **Real-Time Batch Progress**: Interactive confirmation modal showing files to be removed, total storage to reclaim (GB), and a live animated progress bar executing sequential deletions via the Emby API.
 - **Direct Management & Deletion**:
   - Safely delete redundant duplicate copies directly from your browser with interactive confirmation dialogs.
   - One-click copy for exact server file paths (`📋 Copy`).

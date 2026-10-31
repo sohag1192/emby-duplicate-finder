@@ -151,6 +151,32 @@
             </div>
         </div>
 
+        <!-- Batch Selection Action Bar -->
+        <div id="selection-bar" class="card selection-bar hidden">
+            <div class="selection-left">
+                <span class="selection-status-icon">☑️</span>
+                <div class="selection-text-group">
+                    <span class="selection-count-pill" id="selectedCountBadge">0 files selected</span>
+                    <span class="selection-size-pill" id="selectedSizeBadge">0 B</span>
+                </div>
+            </div>
+
+            <div class="selection-actions">
+                <button type="button" class="btn-smart-select" onclick="smartSelectKeepBest()" title="Automatically keep the best resolution/quality copy and select all extra duplicates for deletion">
+                    <span class="star-icon">★</span> Smart Select (Keep Best)
+                </button>
+                <button type="button" class="btn-secondary btn-sm" onclick="selectAllDuplicates()">
+                    Select All
+                </button>
+                <button type="button" class="btn-secondary btn-sm" onclick="deselectAllDuplicates()">
+                    Deselect All
+                </button>
+                <button type="button" id="btnDeleteSelected" class="btn-danger btn-sm btn-batch-delete" onclick="promptBatchDelete()" disabled>
+                    <span>🗑️</span> Delete Selected
+                </button>
+            </div>
+        </div>
+
         <!-- Results Container -->
         <div id="results"></div>
 
@@ -206,6 +232,37 @@
             <div class="modal-footer">
                 <button class="btn-secondary" onclick="closeDeleteModal()">Cancel</button>
                 <button id="confirmDeleteBtn" class="btn-danger">Delete Permanently</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Batch Delete Confirmation Modal -->
+    <div id="batch-delete-modal" class="modal-overlay hidden">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3>⚠️ Confirm Batch File Deletion</h3>
+                <button class="modal-close" onclick="closeBatchDeleteModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>You have selected multiple duplicate copies for permanent deletion from your Emby Server and hard disk.</p>
+                <div class="batch-delete-summary">
+                    <div class="summary-chip danger"><strong>Files to Delete:</strong> <span id="batchDeleteCount">0</span></div>
+                    <div class="summary-chip success"><strong>Storage to Reclaim:</strong> <span id="batchDeleteSize">0 B</span></div>
+                </div>
+                <div class="batch-items-preview-box">
+                    <ul id="batchDeletePreviewList" class="batch-preview-list"></ul>
+                </div>
+                <div id="batchDeleteProgressContainer" class="progress-box hidden">
+                    <div class="progress-bar-track">
+                        <div id="batchDeleteProgressBar" class="progress-bar-fill"></div>
+                    </div>
+                    <p id="batchDeleteProgressText">Deleting files...</p>
+                </div>
+                <p class="text-danger"><small>⚠️ Warning: This action cannot be undone. The selected files will be permanently deleted from your disk.</small></p>
+            </div>
+            <div class="modal-footer">
+                <button id="cancelBatchDeleteBtn" class="btn-secondary" onclick="closeBatchDeleteModal()">Cancel</button>
+                <button id="confirmBatchDeleteBtn" class="btn-danger" onclick="executeBatchDelete()">Confirm & Delete Selected</button>
             </div>
         </div>
     </div>

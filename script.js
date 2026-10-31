@@ -5,7 +5,8 @@ let appState = {
     useCorsProxy: false,
     corsProxyUrl: 'https://corsproxy.io/?',
     results: [], // Array of libraries with duplicates
-    pendingDelete: null // Stores item to delete: { libraryIndex, groupIndex, fileIndex, itemId, itemTitle, path, libraryName }
+    pendingDelete: null, // Stores item to delete: { libraryIndex, groupIndex, fileIndex, itemId, itemTitle, path, libraryName }
+    selectedFiles: new Set() // stores keys in format "libIdx_groupIdx_fileIdx"
 };
 
 // Initialize on DOM load
@@ -146,7 +147,9 @@ async function findDuplicates() {
     localStorage.setItem('emby_api_key', apiKey);
 
     resultsDiv.innerHTML = '';
+    appState.selectedFiles.clear();
     document.getElementById('filter-bar').classList.add('hidden');
+    document.getElementById('selection-bar').classList.add('hidden');
     loadingOverlay.classList.remove('hidden');
 
     try {
@@ -215,6 +218,8 @@ async function findDuplicates() {
 
         if (duplicateResults.length > 0) {
             document.getElementById('filter-bar').classList.remove('hidden');
+            document.getElementById('selection-bar').classList.remove('hidden');
+            updateSelectionUI();
             showToast(`Found duplicate items in ${duplicateResults.length} libraries!`, 'success');
         } else {
             showToast('Scan complete: No duplicate media found!', 'success');
@@ -255,6 +260,30 @@ async function fetchEpisodesFromLibrary(libraryId) {
     const response = await embyFetch(`/emby/Items?Recursive=true&ParentId=${libraryId}&IncludeItemTypes=Episode&Fields=${fields}&api_key=${appState.apiKey}`);
     const data = await response.json();
     return data.Items || [];
+}
+
+// Algorithm: Find best file in a group to keep (4K > 1080p > 720p > SD, then largest size/bitrate)
+function getBestFileIndex(files) {
+    if (!files || files.length === 0) return 0;
+    let bestIdx = 0;
+    let maxScore = -1;
+
+    files.forEach((f, idx) => {
+        let resScore = 0;
+        const maxDim = Math.max(f.width || 0, f.height || 0);
+        if (maxDim >= 3800) resScore = 4000;
+        else if (maxDim >= 1900) resScore = 3000;
+        else if (maxDim >= 1200) resScore = 2000;
+        else resScore = 1000;
+
+        const score = (resScore * 1000000000000) + (f.size || 0);
+        if (score > maxScore) {
+            maxScore = score;
+            bestIdx = idx;
+        }
+    });
+
+    return bestIdx;
 }
 
 // Duplicate Detection: Movies
@@ -506,6 +535,7 @@ function renderDuplicateGroups(groups, libIdx) {
         const posterUrl = `${appState.serverUrl}/emby/Items/${group.primaryItemId}/Images/Primary?maxWidth=150&api_key=${appState.apiKey}`;
         const proxiedPosterUrl = appState.useCorsProxy ? `${appState.corsProxyUrl}${encodeURIComponent(posterUrl)}` : posterUrl;
         const fallbackIcon = group.type === 'episode' ? '📺' : '🎬';
+        const bestIdx = getBestFileIndex(group.files);
 
         return `
             <div class="duplicate-group" id="group-${libIdx}-${groupIdx}">
@@ -527,12 +557,21 @@ function renderDuplicateGroups(groups, libIdx) {
                     ${group.files.map((file, fileIdx) => {
                         const sizeFormatted = file.size ? formatBytes(file.size) : null;
                         const resLabel = getResolutionLabel(file.width, file.height);
+                        const isBest = (fileIdx === bestIdx && group.files.length > 1);
+                        const fileKey = `${libIdx}_${groupIdx}_${fileIdx}`;
+                        const isSelected = appState.selectedFiles.has(fileKey);
 
                         return `
-                            <div class="file-row" id="file-${libIdx}-${groupIdx}-${fileIdx}">
+                            <div class="file-row ${isSelected ? 'is-selected' : ''}" id="file-${libIdx}-${groupIdx}-${fileIdx}">
                                 <div class="file-info">
-                                    <span class="file-path" title="${escapeHtml(file.path)}">📁 ${escapeHtml(file.path)}</span>
+                                    <div style="display:flex; align-items:center; gap:8px;">
+                                        <label class="file-select-checkbox" title="Select for batch delete">
+                                            <input type="checkbox" class="file-checkbox" ${isSelected ? 'checked' : ''} onchange="toggleFileSelection(${libIdx}, ${groupIdx}, ${fileIdx}, this.checked)">
+                                        </label>
+                                        <span class="file-path" title="${escapeHtml(file.path)}">📁 ${escapeHtml(file.path)}</span>
+                                    </div>
                                     <div class="file-specs">
+                                        ${isBest ? `<span class="spec-badge spec-best">★ Keep (Best)</span>` : ''}
                                         ${resLabel ? `<span class="spec-badge ${resLabel.includes('4K') ? 'spec-4k' : ''}">${resLabel}</span>` : ''}
                                         ${sizeFormatted ? `<span class="spec-badge spec-size">${sizeFormatted}</span>` : ''}
                                         ${file.container ? `<span class="spec-badge">${escapeHtml(file.container.toUpperCase())}</span>` : ''}
@@ -553,6 +592,107 @@ function renderDuplicateGroups(groups, libIdx) {
             </div>
         `;
     }).join('');
+}
+
+// Selection Management
+function toggleFileSelection(libIdx, groupIdx, fileIdx, isChecked) {
+    const key = `${libIdx}_${groupIdx}_${fileIdx}`;
+    if (isChecked) {
+        appState.selectedFiles.add(key);
+    } else {
+        appState.selectedFiles.delete(key);
+    }
+
+    const row = document.getElementById(`file-${libIdx}-${groupIdx}-${fileIdx}`);
+    if (row) {
+        row.classList.toggle('is-selected', isChecked);
+        const chk = row.querySelector('.file-checkbox');
+        if (chk) chk.checked = isChecked;
+    }
+
+    updateSelectionUI();
+}
+
+function smartSelectKeepBest() {
+    appState.selectedFiles.clear();
+    let selectedCount = 0;
+    let totalBytes = 0;
+
+    appState.results.forEach((lib, libIdx) => {
+        lib.duplicateGroups.forEach((group, groupIdx) => {
+            if (group.files.length > 1) {
+                const bestIdx = getBestFileIndex(group.files);
+                group.files.forEach((file, fileIdx) => {
+                    if (fileIdx !== bestIdx) {
+                        const key = `${libIdx}_${groupIdx}_${fileIdx}`;
+                        appState.selectedFiles.add(key);
+                        selectedCount++;
+                        totalBytes += (file.size || 0);
+                    }
+                });
+            }
+        });
+    });
+
+    displayResults();
+    handleSearchFilter();
+    updateSelectionUI();
+    showToast(`★ Smart Selected ${selectedCount} lower-quality copies (${formatBytes(totalBytes)} reclaimable)!`, 'success');
+}
+
+function selectAllDuplicates() {
+    appState.selectedFiles.clear();
+    appState.results.forEach((lib, libIdx) => {
+        lib.duplicateGroups.forEach((group, groupIdx) => {
+            group.files.forEach((_, fileIdx) => {
+                appState.selectedFiles.add(`${libIdx}_${groupIdx}_${fileIdx}`);
+            });
+        });
+    });
+
+    displayResults();
+    handleSearchFilter();
+    updateSelectionUI();
+    showToast(`Selected all ${appState.selectedFiles.size} duplicate items!`, 'info');
+}
+
+function deselectAllDuplicates() {
+    appState.selectedFiles.clear();
+    displayResults();
+    handleSearchFilter();
+    updateSelectionUI();
+    showToast('Deselected all files.', 'info');
+}
+
+function updateSelectionUI() {
+    const bar = document.getElementById('selection-bar');
+    const countBadge = document.getElementById('selectedCountBadge');
+    const sizeBadge = document.getElementById('selectedSizeBadge');
+    const deleteBtn = document.getElementById('btnDeleteSelected');
+
+    if (!bar) return;
+
+    const count = appState.selectedFiles.size;
+    let totalBytes = 0;
+
+    appState.selectedFiles.forEach(key => {
+        const [l, g, f] = key.split('_').map(Number);
+        const file = appState.results[l]?.duplicateGroups[g]?.files[f];
+        if (file && file.size) {
+            totalBytes += file.size;
+        }
+    });
+
+    countBadge.textContent = `${count} ${count === 1 ? 'file' : 'files'} selected`;
+    sizeBadge.textContent = formatBytes(totalBytes);
+
+    if (count > 0) {
+        deleteBtn.disabled = false;
+        deleteBtn.innerHTML = `<span>🗑️</span> Delete Selected (${count})`;
+    } else {
+        deleteBtn.disabled = true;
+        deleteBtn.innerHTML = `<span>🗑️</span> Delete Selected`;
+    }
 }
 
 // Accordion Controls
@@ -662,8 +802,11 @@ async function executeDelete() {
             library.count = library.duplicateGroups.length;
         }
 
+        appState.selectedFiles.delete(`${libIdx}_${groupIdx}_${fileIdx}`);
+
         displayResults();
         handleSearchFilter();
+        updateSelectionUI();
 
     } catch (err) {
         console.error('Delete error:', err);
@@ -672,6 +815,117 @@ async function executeDelete() {
     } finally {
         confirmBtn.disabled = false;
         confirmBtn.textContent = 'Delete Permanently';
+    }
+}
+
+// Batch Delete Flow
+function promptBatchDelete() {
+    if (appState.selectedFiles.size === 0) return;
+    const modal = document.getElementById('batch-delete-modal');
+    const countSpan = document.getElementById('batchDeleteCount');
+    const sizeSpan = document.getElementById('batchDeleteSize');
+    const list = document.getElementById('batchDeletePreviewList');
+    const progressBox = document.getElementById('batchDeleteProgressContainer');
+
+    progressBox.classList.add('hidden');
+    list.innerHTML = '';
+
+    let totalBytes = 0;
+    appState.selectedFiles.forEach(key => {
+        const [l, g, f] = key.split('_').map(Number);
+        const group = appState.results[l]?.duplicateGroups[g];
+        const file = group?.files[f];
+        if (file) {
+            totalBytes += (file.size || 0);
+            const li = document.createElement('li');
+            li.className = 'batch-preview-item';
+            li.innerHTML = `<span><strong>${escapeHtml(group.title)}:</strong> <code>${escapeHtml(file.path)}</code></span>
+                            <span class="batch-preview-size">${file.size ? formatBytes(file.size) : ''}</span>`;
+            list.appendChild(li);
+        }
+    });
+
+    countSpan.textContent = appState.selectedFiles.size;
+    sizeSpan.textContent = formatBytes(totalBytes);
+    modal.classList.remove('hidden');
+}
+
+function closeBatchDeleteModal() {
+    document.getElementById('batch-delete-modal').classList.add('hidden');
+}
+
+async function executeBatchDelete() {
+    const confirmBtn = document.getElementById('confirmBatchDeleteBtn');
+    const cancelBtn = document.getElementById('cancelBatchDeleteBtn');
+    const progressBox = document.getElementById('batchDeleteProgressContainer');
+    const progressBar = document.getElementById('batchDeleteProgressBar');
+    const progressText = document.getElementById('batchDeleteProgressText');
+
+    confirmBtn.disabled = true;
+    cancelBtn.disabled = true;
+    progressBox.classList.remove('hidden');
+
+    const keysToDelete = Array.from(appState.selectedFiles);
+    const total = keysToDelete.length;
+    let completed = 0;
+    let errorCount = 0;
+
+    for (let i = 0; i < total; i++) {
+        const key = keysToDelete[i];
+        const [l, g, f] = key.split('_').map(Number);
+        const file = appState.results[l]?.duplicateGroups[g]?.files[f];
+        if (file) {
+            try {
+                await embyFetch(`/emby/Items/${file.itemId}?api_key=${appState.apiKey}`, {
+                    method: 'DELETE'
+                });
+            } catch (e) {
+                console.error('Delete error for item:', file.itemId, e);
+                errorCount++;
+            }
+        }
+        completed++;
+        const percent = Math.round((completed / total) * 100);
+        progressBar.style.width = `${percent}%`;
+        progressText.textContent = `Deleting ${completed} of ${total} files (${percent}%)...`;
+    }
+
+    // Sort descending by indices so deletions do not distort array indices
+    keysToDelete.sort((a, b) => {
+        const [l1, g1, f1] = a.split('_').map(Number);
+        const [l2, g2, f2] = b.split('_').map(Number);
+        if (l1 !== l2) return l2 - l1;
+        if (g1 !== g2) return g2 - g1;
+        return f2 - f1;
+    });
+
+    keysToDelete.forEach(key => {
+        const [l, g, f] = key.split('_').map(Number);
+        const group = appState.results[l]?.duplicateGroups[g];
+        if (group && group.files[f]) {
+            group.files.splice(f, 1);
+        }
+    });
+
+    // Clean up groups that have <= 1 file
+    appState.results.forEach(lib => {
+        lib.duplicateGroups = lib.duplicateGroups.filter(g => g.files.length > 1);
+        lib.count = lib.duplicateGroups.length;
+    });
+
+    appState.selectedFiles.clear();
+    confirmBtn.disabled = false;
+    cancelBtn.disabled = false;
+    closeBatchDeleteModal();
+
+    displayResults();
+    handleSearchFilter();
+    updateSelectionUI();
+
+    if (errorCount === 0) {
+        showToast(`🎉 Successfully batch deleted ${total} files!`, 'success');
+    } else {
+        showToast(`Batch delete completed: ${total - errorCount} deleted, ${errorCount} failed.`, 'warning');
     }
 }
 
