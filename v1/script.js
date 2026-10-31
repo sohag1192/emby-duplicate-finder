@@ -753,10 +753,10 @@ function renderTableView(groups, libIdx) {
             <table class="dupe-table">
                 <thead>
                     <tr>
-                        <th style="width: 50px;">Poster</th>
-                        <th>Media Details</th>
-                        <th>Duplicate Copies & Storage Paths</th>
-                        <th style="text-align: center; width: 80px;">Copies</th>
+                        <th class="col-poster">Poster</th>
+                        <th class="col-title">Media Details</th>
+                        <th class="col-files">Duplicate Copies & Storage Paths</th>
+                        <th class="col-copies">Copies</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -776,7 +776,10 @@ function renderTableView(groups, libIdx) {
                                 </td>
                                 <td class="table-cell-title">
                                     <span class="table-title-text">${escapeHtml(group.title)}</span>
-                                    ${group.year ? `<span class="table-year-text">📅 ${escapeHtml(String(group.year))}</span>` : ''}
+                                    <div class="table-title-sub">
+                                        ${group.year ? `<span class="table-year-text">📅 ${escapeHtml(String(group.year))}</span>` : ''}
+                                        <span class="meta-chip danger" style="padding: 2px 8px; font-size: 11px;">${group.files.length} Copies</span>
+                                    </div>
                                 </td>
                                 <td class="table-cell-files">
                                     ${group.files.map((file, fileIdx) => {
