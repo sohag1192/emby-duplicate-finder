@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emby Duplicate Movie & TV Series Finder</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Ambient Background Lighting Orbs -->
+    <div class="ambient-glow glow-cyan"></div>
+    <div class="ambient-glow glow-purple"></div>
+    <div class="ambient-glow glow-emerald"></div>
+
+    <div class="container">
+        <header>
+            <div class="brand-pill">
+                <span class="pulse-dot"></span>
+                <span>EMBY MEDIA OPTIMIZER</span>
+            </div>
+            <h1>Duplicate Media Finder</h1>
+            <p class="subtitle">Identify, compare quality, and clean up duplicate movies & TV episodes in your Emby library</p>
+        </header>
+
+        <!-- Configuration Form -->
+        <div class="card input-card">
+            <div class="card-title-row">
+                <span class="card-step-badge">1</span>
+                <h3>Server Connection</h3>
+            </div>
+
+            <div class="input-group">
+                <label for="embyServerUrl">Emby Server URL</label>
+                <input type="text" id="embyServerUrl" placeholder="e.g. http://192.168.1.10:8096 or https://emby.mydomain.com">
+            </div>
+
+            <div class="input-group">
+                <label for="apiKey">Emby Admin API Key</label>
+                <input type="password" id="apiKey" placeholder="Generated from Emby Dashboard ➔ Advanced ➔ Security ➔ API Keys">
+            </div>
+
+            <div class="input-row">
+                <div class="input-group flex-1">
+                    <label for="libraryType">Library Scan Target</label>
+                    <select id="libraryType">
+                        <option value="all">🎬 & 📺 All Libraries (Movies & TV Series)</option>
+                        <option value="movies">🎬 Movies Only</option>
+                        <option value="tvshows">📺 TV Series & Episodes Only</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Advanced / CORS Settings Accordion -->
+            <div class="advanced-settings-toggle" onclick="toggleAdvancedSettings()">
+                <span>⚙️ Connection & CORS Proxy Settings</span>
+                <span id="advanced-toggle-icon">▼</span>
+            </div>
+
+            <div id="advanced-settings" class="advanced-settings-panel hidden">
+                <div class="checkbox-group">
+                    <label class="custom-checkbox">
+                        <input type="checkbox" id="useCorsProxy">
+                        <span class="checkmark"></span>
+                        Enable CORS Proxy (Routes requests securely to bypass HTTPS ➔ HTTP mixed-content blocks)
+                    </label>
+                </div>
+                <div class="input-group mt-10">
+                    <label for="corsProxyUrl">CORS Proxy Prefix URL</label>
+                    <input type="text" id="corsProxyUrl" value="https://corsproxy.io/?" placeholder="https://corsproxy.io/?">
+                    <small class="helper-text">Default: <code>https://corsproxy.io/?</code> (or specify your custom reverse proxy URL)</small>
+                </div>
+                <div class="guide-link-row">
+                    <button type="button" class="btn-text" onclick="openCorsHelpModal()">📖 View CORS & Connection Setup Guide</button>
+                </div>
+            </div>
+
+            <!-- Warning banner for mixed content -->
+            <div id="mixedContentWarning" class="alert-banner warning-banner hidden">
+                <strong>⚠️ Mixed Content Detected:</strong> This web page is loaded over HTTPS, but your Emby Server URL uses HTTP. Web browsers block insecure HTTP requests from HTTPS sites. Please either use HTTPS for Emby, enable the <b>CORS Proxy</b> above, or open this file locally.
+            </div>
+
+            <button id="scanBtn" class="btn-primary btn-scan" onclick="findDuplicates()">
+                <span class="btn-icon">⚡</span> Scan For Duplicate Media
+            </button>
+        </div>
+
+        <!-- Filter & Search Bar (Visible when results are available) -->
+        <div id="filter-bar" class="card filter-bar hidden">
+            <div class="search-input-wrapper">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="searchFilter" placeholder="Live filter by movie, show name or file path..." oninput="handleSearchFilter()">
+            </div>
+            <div class="filter-actions">
+                <button class="btn-secondary btn-sm" onclick="expandAllLibraries()">Expand All</button>
+                <button class="btn-secondary btn-sm" onclick="collapseAllLibraries()">Collapse All</button>
+            </div>
+        </div>
+
+        <!-- Results Container -->
+        <div id="results"></div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="hidden">
+        <div class="spinner-wrapper">
+            <div class="spinner"></div>
+            <div class="spinner-ring"></div>
+        </div>
+        <p id="loading-text">Scanning Emby Libraries...</p>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="delete-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>⚠️ Confirm Permanent File Deletion</h3>
+                <button class="modal-close" onclick="closeDeleteModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to permanently delete this duplicate file from your Emby Server and hard disk?</p>
+                <div class="delete-item-preview">
+                    <div><strong>Title:</strong> <span id="deleteModalTitle"></span></div>
+                    <div><strong>Library:</strong> <span id="deleteModalLibrary"></span></div>
+                    <div class="path-box"><strong>File Path:</strong> <code id="deleteModalPath"></code></div>
+                </div>
+                <p class="text-danger"><small>⚠️ This action is permanent and cannot be undone.</small></p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeDeleteModal()">Cancel</button>
+                <button id="confirmDeleteBtn" class="btn-danger">Delete Permanently</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CORS Help Modal -->
+    <div id="cors-modal" class="modal-overlay hidden">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3>🌐 Emby CORS & Connection Guide</h3>
+                <button class="modal-close" onclick="closeCorsHelpModal()">&times;</button>
+            </div>
+            <div class="modal-body markdown-body">
+                <h4>Why do connection or CORS errors happen?</h4>
+                <p>Web browsers enforce the Same-Origin Policy (SOP) and Cross-Origin Resource Sharing (CORS) rules that restrict web pages from directly requesting data from other domains or ports without proper headers.</p>
+
+                <h4>Common Causes & Solutions:</h4>
+                <ol>
+                    <li>
+                        <strong>Mixed Content (HTTPS vs HTTP):</strong>
+                        <p>If you opened this web app via <code>https://...</code> (like GitHub Pages), but your Emby server is <code>http://...:8096</code>, the browser blocks the request.
+                        <br><strong>Solution:</strong> Check the <b>"Enable CORS Proxy"</b> option in the Connection Settings, or host Emby with an SSL/TLS domain (HTTPS), or run this HTML file locally on your computer via <code>file:///</code> or local HTTP.</p>
+                    </li>
+                    <li>
+                        <strong>Missing CORS Headers on Emby:</strong>
+                        <p>If Emby is accessed through a Reverse Proxy (such as Nginx, Caddy, or Cloudflare), the proxy must allow Cross-Origin headers.</p>
+                        <p><b>Example Nginx configuration:</b></p>
+                        <pre><code>location / {
+    proxy_pass http://127.0.0.1:8096;
+    proxy_set_header Host $host;
+
+    # CORS Headers
+    add_header 'Access-Control-Allow-Origin' '*' always;
+    add_header 'Access-Control-Allow-Methods' 'GET, POST, DELETE, OPTIONS' always;
+    add_header 'Access-Control-Allow-Headers' 'Content-Type, Authorization, X-Emby-Token' always;
+    if ($request_method = 'OPTIONS') {
+        return 204;
+    }
+}</code></pre>
+                    </li>
+                    <li>
+                        <strong>Using the Built-in CORS Proxy:</strong>
+                        <p>Simply check the <b>"Enable CORS Proxy"</b> box under <b>Connection & CORS Settings</b>. This routes the API requests through a secure proxy server that adds the necessary CORS headers automatically.</p>
+                    </li>
+                    <li>
+                        <strong>Allow Media Deletion in Emby:</strong>
+                        <p>To delete duplicate files directly using this tool, make sure your Emby user/API key has permissions enabled under: <code>Emby Server Dashboard -> Users -> [Your User] -> Allow media deletion from clients</code>.</p>
+                    </li>
+                </ol>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-primary" onclick="closeCorsHelpModal()">Got It</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container"></div>
+
+    <script src="script.js"></script>
+</body>
+</html>
