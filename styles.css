@@ -1221,3 +1221,40 @@ footer {
     font-size: 12.5px;
     color: var(--text-muted);
 }
+
+
+/* Pro Edition Link Banner */
+.version-banner {
+    margin-top: 14px;
+}
+
+.pro-edition-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(168, 85, 247, 0.12);
+    border: 1px solid rgba(168, 85, 247, 0.35);
+    color: #d8b4fe;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 14px;
+    border-radius: 20px;
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.pro-edition-link:hover {
+    background: rgba(168, 85, 247, 0.22);
+    border-color: rgba(168, 85, 247, 0.5);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 15px rgba(168, 85, 247, 0.25);
+}
+
+.pro-badge {
+    background: linear-gradient(135deg, #a855f7, #ec4899);
+    color: #fff;
+    padding: 2px 7px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 800;
+}

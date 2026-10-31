@@ -25,10 +25,13 @@ An ultra-modern, high-performance web tool designed for **Emby Media Server** to
 
 ---
 
-## 🌟 Live Demo
+## 🌟 Live Demos
 
 You can try the web application directly in your browser without any installation:
-👉 **[https://sohag1192.github.io/emby-duplicate-finder/](https://sohag1192.github.io/emby-duplicate-finder/)**
+- 🚀 **Pro Edition (Interactive Table & Grid Views + Storage Stats):**  
+  👉 **[https://sohag1192.github.io/emby-duplicate-finder/v1/](https://sohag1192.github.io/emby-duplicate-finder/v1/)**
+- 🎬 **Classic Edition:**  
+  👉 **[https://sohag1192.github.io/emby-duplicate-finder/](https://sohag1192.github.io/emby-duplicate-finder/)**
 
 ---
 
