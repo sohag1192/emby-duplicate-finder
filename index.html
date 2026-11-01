@@ -313,6 +313,22 @@
                     <div class="summary-chip success"><strong>Total Space to Reclaim:</strong> <span id="folderDeleteSize">0 B</span></div>
                 </div>
 
+                <div class="checkbox-group mt-10 mb-10">
+                    <label class="custom-checkbox">
+                        <input type="checkbox" id="chkAlsoDeletePhysicalDir" checked>
+                        <span class="checkmark"></span>
+                        <strong>Also delete directory folder itself</strong> from Emby library & hard disk
+                    </label>
+                </div>
+
+                <div class="cmd-copy-box">
+                    <span>Quick CMD command to force-remove directory from Windows / OS:</span>
+                    <div class="cmd-row">
+                        <code id="folderDeleteCmdText"></code>
+                        <button type="button" class="btn-secondary btn-sm" onclick="copyFolderDeleteCmd()">📋 Copy Command</button>
+                    </div>
+                </div>
+
                 <p class="section-label">Files inside this directory that will be deleted:</p>
                 <div class="batch-items-preview-box">
                     <ul id="folderDeletePreviewList" class="batch-preview-list"></ul>

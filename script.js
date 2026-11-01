@@ -292,7 +292,7 @@ async function fetchLibraries() {
 
 // API: Fetch Movies
 async function fetchMoviesFromLibrary(libraryId) {
-    const fields = 'Path,ProductionYear,MediaSources,Width,Height,Size,Container';
+    const fields = 'Path,ProductionYear,MediaSources,Width,Height,Size,Container,ParentId';
     const response = await embyFetch(`/emby/Items?Recursive=true&ParentId=${libraryId}&IncludeItemTypes=Movie&Fields=${fields}&api_key=${appState.apiKey}`);
     const data = await response.json();
     return data.Items || [];
@@ -300,7 +300,7 @@ async function fetchMoviesFromLibrary(libraryId) {
 
 // API: Fetch Episodes
 async function fetchEpisodesFromLibrary(libraryId) {
-    const fields = 'Path,SeriesName,SeasonName,IndexNumber,ParentIndexNumber,ProductionYear,MediaSources,Width,Height,Size,Container,SeriesId,SeasonId';
+    const fields = 'Path,SeriesName,SeasonName,IndexNumber,ParentIndexNumber,ProductionYear,MediaSources,Width,Height,Size,Container,SeriesId,SeasonId,ParentId';
     const response = await embyFetch(`/emby/Items?Recursive=true&ParentId=${libraryId}&IncludeItemTypes=Episode&Fields=${fields}&api_key=${appState.apiKey}`);
     const data = await response.json();
     return data.Items || [];
@@ -354,6 +354,7 @@ function findDuplicatesInMovieLibrary(movies) {
             movie.MediaSources.forEach(ms => {
                 groups[key].files.push({
                     itemId: movie.Id,
+                    parentId: movie.ParentId,
                     mediaSourceId: ms.Id,
                     name: movie.Name,
                     path: ms.Path || movie.Path || 'Unknown path',
@@ -367,6 +368,7 @@ function findDuplicatesInMovieLibrary(movies) {
         } else {
             groups[key].files.push({
                 itemId: movie.Id,
+                parentId: movie.ParentId,
                 name: movie.Name,
                 path: movie.Path || 'Unknown path',
                 size: movie.Size,
@@ -556,6 +558,9 @@ function findDuplicatesInTvLibrary(episodes) {
             ep.MediaSources.forEach(ms => {
                 groups[key].files.push({
                     itemId: ep.Id,
+                    parentId: ep.ParentId,
+                    seasonId: ep.SeasonId,
+                    seriesId: ep.SeriesId,
                     mediaSourceId: ms.Id,
                     name: displayTitle,
                     path: ms.Path || ep.Path || 'Unknown path',
@@ -569,6 +574,9 @@ function findDuplicatesInTvLibrary(episodes) {
         } else {
             groups[key].files.push({
                 itemId: ep.Id,
+                parentId: ep.ParentId,
+                seasonId: ep.SeasonId,
+                seriesId: ep.SeriesId,
                 name: displayTitle,
                 path: ep.Path || 'Unknown path',
                 size: ep.Size,
@@ -1174,8 +1182,26 @@ function promptDeleteFolder(libIdx, encodedDirPath) {
         list.appendChild(li);
     });
 
+    const isWindows = dirPath.includes('\\');
+    const cmd = isWindows ? `rd /s /q "${dirPath}"` : `rm -rf "${dirPath}"`;
+    const cmdTextElem = document.getElementById('folderDeleteCmdText');
+    if (cmdTextElem) cmdTextElem.textContent = cmd;
+
     document.getElementById('folderDeleteProgressContainer').classList.add('hidden');
     modal.classList.remove('hidden');
+}
+
+function copyFolderDeleteCmd() {
+    if (!pendingFolderDelete || !pendingFolderDelete.dirPath) return;
+    const isWindows = pendingFolderDelete.dirPath.includes('\\');
+    const cmd = isWindows 
+        ? `rd /s /q "${pendingFolderDelete.dirPath}"`
+        : `rm -rf "${pendingFolderDelete.dirPath}"`;
+    navigator.clipboard.writeText(cmd).then(() => {
+        showToast(`📋 Copied command to clipboard: ${cmd}`, 'success');
+    }).catch(() => {
+        prompt('Copy delete command:', cmd);
+    });
 }
 
 function closeFolderDeleteModal() {
@@ -1192,6 +1218,7 @@ async function executeDeleteFolder() {
     const progressBox = document.getElementById('folderDeleteProgressContainer');
     const progressBar = document.getElementById('folderDeleteProgressBar');
     const progressText = document.getElementById('folderDeleteProgressText');
+    const deletePhysicalFolder = document.getElementById('chkAlsoDeletePhysicalDir')?.checked ?? true;
 
     confirmBtn.disabled = true;
     cancelBtn.disabled = true;
@@ -1201,6 +1228,7 @@ async function executeDeleteFolder() {
     let completed = 0;
     let errorCount = 0;
 
+    // 1. Delete all media file items
     for (let i = 0; i < total; i++) {
         const item = files[i];
         try {
@@ -1212,12 +1240,64 @@ async function executeDeleteFolder() {
             errorCount++;
         }
         completed++;
-        const percent = Math.round((completed / total) * 100);
+        const percent = Math.round((completed / (total + (deletePhysicalFolder ? 1 : 0))) * 100);
         progressBar.style.width = `${percent}%`;
         progressText.textContent = `Deleting ${completed} of ${total} files in folder (${percent}%)...`;
     }
 
-    // Remove deleted files from duplicateGroups
+    // 2. Also delete the directory folder itself from Emby & disk if checked
+    if (deletePhysicalFolder) {
+        progressText.textContent = `Deleting directory folder from Emby & hard disk...`;
+        const cleanDir = dirPath.replace(/[\\/]+$/, '').toLowerCase();
+        const folderItemIds = new Set();
+
+        // Check parentIds and seasonIds from the files
+        files.forEach(item => {
+            if (item.file.parentId) folderItemIds.add(item.file.parentId);
+            if (item.file.seasonId) folderItemIds.add(item.file.seasonId);
+        });
+
+        // Also query Emby for any Folder or Season items matching this path
+        const library = appState.results[libIdx];
+        if (library) {
+            try {
+                const folderResp = await embyFetch(`/emby/Items?Recursive=true&ParentId=${library.libraryId}&IncludeItemTypes=Folder,Season&Fields=Path&api_key=${appState.apiKey}`);
+                const folderData = await folderResp.json();
+                if (folderData.Items) {
+                    folderData.Items.forEach(item => {
+                        if (item.Path && item.Path.replace(/[\\/]+$/, '').toLowerCase() === cleanDir) {
+                            folderItemIds.add(item.Id);
+                        }
+                    });
+                }
+            } catch (err) {
+                console.log('Folder item lookup error:', err);
+            }
+        }
+
+        // Delete each matching folder item from Emby
+        for (const folderId of folderItemIds) {
+            try {
+                await embyFetch(`/emby/Items/${folderId}?api_key=${appState.apiKey}`, {
+                    method: 'DELETE'
+                });
+                console.log('Deleted folder item from Emby:', folderId);
+            } catch (err) {
+                console.warn('Folder item deletion error (may already be deleted):', folderId, err);
+            }
+        }
+
+        // Trigger Emby library refresh to remove any ghost folder references
+        try {
+            await embyFetch(`/emby/Library/Refresh?api_key=${appState.apiKey}`, {
+                method: 'POST'
+            });
+        } catch (e) {}
+
+        progressBar.style.width = '100%';
+    }
+
+    // 3. Remove deleted files from duplicateGroups
     const cleanTarget = dirPath.replace(/[\\/]+$/, '').toLowerCase();
     const library = appState.results[libIdx];
     if (library) {
@@ -1246,7 +1326,7 @@ async function executeDeleteFolder() {
     updateSelectionUI();
 
     if (errorCount === 0) {
-        showToast(`🎉 Successfully deleted all ${total} files in folder!`, 'success');
+        showToast(`🎉 Successfully deleted all ${total} files and removed directory folder!`, 'success');
     } else {
         showToast(`Folder delete finished: ${total - errorCount} deleted, ${errorCount} failed.`, 'warning');
     }
