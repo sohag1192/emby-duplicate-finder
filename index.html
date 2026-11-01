@@ -253,6 +253,13 @@
                     <div><strong>Library:</strong> <span id="deleteModalLibrary"></span></div>
                     <div class="path-box"><strong>File Path:</strong> <code id="deleteModalPath"></code></div>
                 </div>
+                <div class="cmd-copy-box mt-10">
+                    <span>Quick CMD command to force-delete this file directly:</span>
+                    <div class="cmd-row">
+                        <code id="singleFileDeleteCmdText"></code>
+                        <button type="button" class="btn-secondary btn-sm" onclick="copySingleFileDeleteCmd()">📋 Copy CMD</button>
+                    </div>
+                </div>
                 <p class="text-danger"><small>⚠️ This action is permanent and cannot be undone.</small></p>
             </div>
             <div class="modal-footer">
