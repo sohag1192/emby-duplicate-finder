@@ -706,6 +706,8 @@ function renderGridView(groups, libIdx) {
                                 const isBest = (fileIdx === bestIdx);
                                 const key = `${libIdx}_${groupIdx}_${fileIdx}`;
                                 const isSelected = appState.selectedFiles.has(key);
+                                const dirPath = getDirectoryFromPath(file.path);
+                                const fileName = getFileNameFromPath(file.path);
 
                                 return `
                                     <div class="file-row ${isSelected ? 'is-selected' : ''}" id="file-${libIdx}-${groupIdx}-${fileIdx}">
@@ -715,7 +717,10 @@ function renderGridView(groups, libIdx) {
                                                    onchange="toggleFileSelection(${libIdx}, ${groupIdx}, ${fileIdx}, this.checked)">
                                         </label>
                                         <div class="file-info">
-                                            <span class="file-path" title="${escapeHtml(file.path)}">📁 ${escapeHtml(file.path)}</span>
+                                            <div class="file-path-wrapper">
+                                                ${dirPath ? `<span class="file-dir-badge" title="Folder: ${escapeHtml(dirPath)}">📁 ${escapeHtml(dirPath)}</span>` : ''}
+                                                <span class="file-name-text" title="${escapeHtml(file.path)}">📄 ${escapeHtml(fileName)}</span>
+                                            </div>
                                             <div class="file-specs">
                                                 ${isBest ? `<span class="spec-badge spec-best">★ Keep (Best)</span>` : ''}
                                                 ${resLabel ? `<span class="spec-badge ${resLabel.includes('4K') ? 'spec-4k' : ''}">${resLabel}</span>` : ''}
@@ -727,6 +732,10 @@ function renderGridView(groups, libIdx) {
                                             <button class="btn-secondary btn-sm" onclick="copyFilePath('${encodeURIComponent(file.path)}')">
                                                 📋 Copy
                                             </button>
+                                            ${dirPath ? `
+                                            <button class="btn-warning btn-sm" onclick="promptDeleteFolder(${libIdx}, '${encodeURIComponent(dirPath)}')" title="Delete all duplicate files in folder: ${escapeHtml(dirPath)}">
+                                                📁 Delete Folder
+                                            </button>` : ''}
                                             <button class="btn-danger btn-sm" onclick="promptDelete(${libIdx}, ${groupIdx}, ${fileIdx})">
                                                 🗑️ Delete
                                             </button>
@@ -788,6 +797,8 @@ function renderTableView(groups, libIdx) {
                                         const isBest = (fileIdx === bestIdx);
                                         const key = `${libIdx}_${groupIdx}_${fileIdx}`;
                                         const isSelected = appState.selectedFiles.has(key);
+                                        const dirPath = getDirectoryFromPath(file.path);
+                                        const fileName = getFileNameFromPath(file.path);
 
                                         return `
                                             <div class="table-file-item ${isSelected ? 'is-selected' : ''}" id="file-${libIdx}-${groupIdx}-${fileIdx}">
@@ -797,7 +808,10 @@ function renderTableView(groups, libIdx) {
                                                                ${isSelected ? 'checked' : ''} 
                                                                onchange="toggleFileSelection(${libIdx}, ${groupIdx}, ${fileIdx}, this.checked)">
                                                     </label>
-                                                    <span class="table-path-text" title="${escapeHtml(file.path)}">📁 ${escapeHtml(file.path)}</span>
+                                                    <div class="file-path-wrapper" style="flex: 1;">
+                                                        ${dirPath ? `<span class="file-dir-badge" title="Folder: ${escapeHtml(dirPath)}">📁 ${escapeHtml(dirPath)}</span>` : ''}
+                                                        <span class="file-name-text" title="${escapeHtml(file.path)}">📄 ${escapeHtml(fileName)}</span>
+                                                    </div>
                                                 </div>
                                                 <div class="table-file-meta">
                                                     <div class="file-specs">
@@ -810,6 +824,10 @@ function renderTableView(groups, libIdx) {
                                                         <button class="btn-secondary btn-sm" onclick="copyFilePath('${encodeURIComponent(file.path)}')">
                                                             📋 Copy
                                                         </button>
+                                                        ${dirPath ? `
+                                                        <button class="btn-warning btn-sm" onclick="promptDeleteFolder(${libIdx}, '${encodeURIComponent(dirPath)}')" title="Delete all duplicate files in folder: ${escapeHtml(dirPath)}">
+                                                            📁 Delete Folder
+                                                        </button>` : ''}
                                                         <button class="btn-danger btn-sm" onclick="promptDelete(${libIdx}, ${groupIdx}, ${fileIdx})">
                                                             🗑️ Delete
                                                         </button>
@@ -1068,6 +1086,240 @@ async function executeBatchDelete() {
     } else {
         showToast(`Batch delete completed: ${total - errorCount} deleted, ${errorCount} failed.`, 'warning');
     }
+}
+
+// Path & Directory Helpers
+function getDirectoryFromPath(filePath) {
+    if (!filePath || filePath === 'Unknown path') return '';
+    const lastSlash = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
+    if (lastSlash === -1) return '';
+    return filePath.substring(0, lastSlash);
+}
+
+function getFileNameFromPath(filePath) {
+    if (!filePath || filePath === 'Unknown path') return filePath || '';
+    const lastSlash = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
+    if (lastSlash === -1) return filePath;
+    return filePath.substring(lastSlash + 1);
+}
+
+function getDuplicateFilesInFolder(libIdx, targetDir) {
+    const lib = appState.results[libIdx];
+    if (!lib) return [];
+    const filesInFolder = [];
+
+    lib.duplicateGroups.forEach((group, groupIdx) => {
+        group.files.forEach((file, fileIdx) => {
+            const fileDir = getDirectoryFromPath(file.path);
+            if (fileDir.toLowerCase() === targetDir.toLowerCase()) {
+                filesInFolder.push({
+                    libIdx,
+                    groupIdx,
+                    fileIdx,
+                    file,
+                    groupTitle: group.title
+                });
+            }
+        });
+    });
+
+    return filesInFolder;
+}
+
+function getUniqueDuplicateFolders() {
+    const folderMap = new Map();
+
+    appState.results.forEach((lib, libIdx) => {
+        lib.duplicateGroups.forEach((group, groupIdx) => {
+            group.files.forEach((file, fileIdx) => {
+                const dir = getDirectoryFromPath(file.path);
+                if (!dir) return;
+                const key = `${libIdx}:::${dir.toLowerCase()}`;
+                if (!folderMap.has(key)) {
+                    folderMap.set(key, {
+                        libIdx,
+                        libName: lib.libraryName,
+                        dirPath: dir,
+                        files: [],
+                        totalBytes: 0
+                    });
+                }
+                const entry = folderMap.get(key);
+                entry.files.push({ libIdx, groupIdx, fileIdx, file, groupTitle: group.title });
+                entry.totalBytes += (file.size || 0);
+            });
+        });
+    });
+
+    return Array.from(folderMap.values());
+}
+
+// Folder Deletion Flow
+let pendingFolderDelete = null;
+
+function promptDeleteFolder(libIdx, encodedDirPath) {
+    const dirPath = decodeURIComponent(encodedDirPath);
+    const files = getDuplicateFilesInFolder(libIdx, dirPath);
+    if (files.length === 0) {
+        showToast('No duplicate files found in this directory.', 'warning');
+        return;
+    }
+
+    pendingFolderDelete = {
+        libIdx,
+        dirPath,
+        files
+    };
+
+    const modal = document.getElementById('folder-delete-modal');
+    document.getElementById('folderDeletePath').textContent = dirPath;
+    document.getElementById('folderDeleteCount').textContent = files.length;
+    
+    const totalBytes = files.reduce((acc, item) => acc + (item.file.size || 0), 0);
+    document.getElementById('folderDeleteSize').textContent = formatBytes(totalBytes);
+
+    const list = document.getElementById('folderDeletePreviewList');
+    list.innerHTML = '';
+    files.forEach(item => {
+        const li = document.createElement('li');
+        li.className = 'batch-preview-item';
+        li.innerHTML = `<span><strong>${escapeHtml(item.groupTitle)}:</strong> <code>${escapeHtml(getFileNameFromPath(item.file.path))}</code></span>
+                        <span class="batch-preview-size">${item.file.size ? formatBytes(item.file.size) : ''}</span>`;
+        list.appendChild(li);
+    });
+
+    document.getElementById('folderDeleteProgressContainer').classList.add('hidden');
+    modal.classList.remove('hidden');
+}
+
+function closeFolderDeleteModal() {
+    document.getElementById('folder-delete-modal').classList.add('hidden');
+    pendingFolderDelete = null;
+}
+
+async function executeDeleteFolder() {
+    if (!pendingFolderDelete) return;
+
+    const { libIdx, dirPath, files } = pendingFolderDelete;
+    const confirmBtn = document.getElementById('confirmFolderDeleteBtn');
+    const cancelBtn = document.getElementById('cancelFolderDeleteBtn');
+    const progressBox = document.getElementById('folderDeleteProgressContainer');
+    const progressBar = document.getElementById('folderDeleteProgressBar');
+    const progressText = document.getElementById('folderDeleteProgressText');
+
+    confirmBtn.disabled = true;
+    cancelBtn.disabled = true;
+    progressBox.classList.remove('hidden');
+
+    const total = files.length;
+    let completed = 0;
+    let errorCount = 0;
+
+    for (let i = 0; i < total; i++) {
+        const item = files[i];
+        try {
+            await embyFetch(`/emby/Items/${item.file.itemId}?api_key=${appState.apiKey}`, {
+                method: 'DELETE'
+            });
+        } catch (e) {
+            console.error('Delete error for item in folder:', item.file.itemId, e);
+            errorCount++;
+        }
+        completed++;
+        const percent = Math.round((completed / total) * 100);
+        progressBar.style.width = `${percent}%`;
+        progressText.textContent = `Deleting ${completed} of ${total} files in folder (${percent}%)...`;
+    }
+
+    // Remove deleted files from duplicateGroups
+    const library = appState.results[libIdx];
+    if (library) {
+        library.duplicateGroups.forEach(group => {
+            group.files = group.files.filter(f => getDirectoryFromPath(f.path).toLowerCase() !== dirPath.toLowerCase());
+        });
+        library.duplicateGroups = library.duplicateGroups.filter(g => g.files.length > 1);
+        library.count = library.duplicateGroups.length;
+    }
+
+    // Clean up selectedFiles for this library
+    appState.selectedFiles.forEach(key => {
+        const [l, g, f] = key.split('_').map(Number);
+        if (l === libIdx) {
+            appState.selectedFiles.delete(key);
+        }
+    });
+
+    confirmBtn.disabled = false;
+    cancelBtn.disabled = false;
+    closeFolderDeleteModal();
+
+    if (typeof calculateStats === 'function') calculateStats();
+    displayResults();
+    handleSearchFilter();
+    updateSelectionUI();
+
+    if (errorCount === 0) {
+        showToast(`🎉 Successfully deleted all ${total} files in folder!`, 'success');
+    } else {
+        showToast(`Folder delete finished: ${total - errorCount} deleted, ${errorCount} failed.`, 'warning');
+    }
+}
+
+function selectAllInFolder(libIdx, encodedDirPath) {
+    const dirPath = decodeURIComponent(encodedDirPath);
+    const files = getDuplicateFilesInFolder(libIdx, dirPath);
+    files.forEach(item => {
+        appState.selectedFiles.add(`${item.libIdx}_${item.groupIdx}_${item.fileIdx}`);
+    });
+    displayResults();
+    handleSearchFilter();
+    updateSelectionUI();
+    showToast(`Selected all ${files.length} duplicate files in folder: ${dirPath}`, 'info');
+}
+
+function promptManageFolders() {
+    const folders = getUniqueDuplicateFolders();
+    const modal = document.getElementById('folders-manager-modal');
+    const list = document.getElementById('foldersManagerList');
+
+    if (folders.length === 0) {
+        showToast('No folders with duplicate files found.', 'info');
+        return;
+    }
+
+    list.innerHTML = '';
+    folders.forEach(f => {
+        const card = document.createElement('div');
+        card.className = 'folder-manager-card';
+        card.innerHTML = `
+            <div class="folder-manager-info">
+                <div class="folder-manager-path">
+                    <span style="font-size: 16px;">📁</span>
+                    <strong>${escapeHtml(f.dirPath)}</strong>
+                </div>
+                <div class="folder-manager-meta">
+                    <span class="meta-chip">${escapeHtml(f.libName)}</span>
+                    <span class="meta-chip danger">${f.files.length} Duplicate Files</span>
+                    <span class="meta-chip success">${formatBytes(f.totalBytes)}</span>
+                </div>
+            </div>
+            <div class="folder-manager-actions">
+                <button type="button" class="btn-secondary btn-sm" onclick="selectAllInFolder(${f.libIdx}, '${encodeURIComponent(f.dirPath)}'); closeFoldersManagerModal();">
+                    ☑️ Select Files
+                </button>
+                <button type="button" class="btn-warning btn-sm" onclick="closeFoldersManagerModal(); promptDeleteFolder(${f.libIdx}, '${encodeURIComponent(f.dirPath)}');">
+                    🗑️ Delete Folder
+                </button>
+            </div>
+        `;
+        list.appendChild(card);
+    });
+
+    modal.classList.remove('hidden');
+}
+
+function closeFoldersManagerModal() {
+    document.getElementById('folders-manager-modal').classList.add('hidden');
 }
 
 // Download Report File (.txt)

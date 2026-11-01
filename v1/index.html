@@ -252,6 +252,9 @@
                 <button type="button" class="btn-smart-select" onclick="smartSelectKeepBest()" title="Automatically keep the best resolution/quality copy and select all extra duplicates for deletion">
                     <span class="star-icon">★</span> Smart Select (Keep Best)
                 </button>
+                <button type="button" class="btn-warning btn-sm" onclick="promptManageFolders()" title="Review and delete entire folders containing duplicate files">
+                    <span>📁</span> Delete by Folder
+                </button>
                 <button type="button" class="btn-secondary btn-sm" onclick="selectAllDuplicates()">
                     Select All
                 </button>
@@ -350,6 +353,64 @@
             <div class="modal-footer">
                 <button id="cancelBatchDeleteBtn" class="btn-secondary" onclick="closeBatchDeleteModal()">Cancel</button>
                 <button id="confirmBatchDeleteBtn" class="btn-danger" onclick="executeBatchDelete()">Confirm & Delete Selected</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Folder Delete Confirmation Modal -->
+    <div id="folder-delete-modal" class="modal-overlay hidden">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3>📁 Confirm Entire Folder / Directory Deletion</h3>
+                <button class="modal-close" onclick="closeFolderDeleteModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>You are about to delete <strong>ALL duplicate files</strong> located in this directory from your Emby Server and hard disk:</p>
+                
+                <div class="folder-path-highlight-box">
+                    <span class="folder-icon-large">📁</span>
+                    <code id="folderDeletePath"></code>
+                </div>
+
+                <div class="batch-delete-summary">
+                    <div class="summary-chip danger"><strong>Total Files in Folder:</strong> <span id="folderDeleteCount">0</span></div>
+                    <div class="summary-chip success"><strong>Total Space to Reclaim:</strong> <span id="folderDeleteSize">0 B</span></div>
+                </div>
+
+                <p class="section-label">Files inside this directory that will be deleted:</p>
+                <div class="batch-items-preview-box">
+                    <ul id="folderDeletePreviewList" class="batch-preview-list"></ul>
+                </div>
+
+                <div id="folderDeleteProgressContainer" class="progress-box hidden">
+                    <div class="progress-bar-track">
+                        <div id="folderDeleteProgressBar" class="progress-bar-fill"></div>
+                    </div>
+                    <p id="folderDeleteProgressText">Deleting files in folder...</p>
+                </div>
+
+                <p class="text-danger"><small>⚠️ Warning: This action cannot be undone. All duplicate files in this folder will be permanently deleted from your disk.</small></p>
+            </div>
+            <div class="modal-footer">
+                <button id="cancelFolderDeleteBtn" class="btn-secondary" onclick="closeFolderDeleteModal()">Cancel</button>
+                <button id="confirmFolderDeleteBtn" class="btn-danger" onclick="executeDeleteFolder()">Confirm & Delete Entire Folder</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Folders Overview & Bulk Manager Modal -->
+    <div id="folders-manager-modal" class="modal-overlay hidden">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3>📁 Duplicate Folders & Directories</h3>
+                <button class="modal-close" onclick="closeFoldersManagerModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Here are all the directories on your server that contain duplicate files. You can select all files in a folder or delete an entire folder at once:</p>
+                <div id="foldersManagerList" class="folders-manager-list"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeFoldersManagerModal()">Close</button>
             </div>
         </div>
     </div>

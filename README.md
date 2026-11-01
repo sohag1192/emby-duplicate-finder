@@ -81,6 +81,8 @@ Expand any library to inspect posters, release years, and copy counts.
   - Precise human-readable file sizes (MB / GB) and video containers (MKV, MP4, etc.).
 - **Smart Select & Batch Deletion**:
   - **★ Smart Select (Keep Best)**: Automatically scores and identifies the highest resolution (4K > 1080p > 720p > SD) and highest bitrate/size copy, pins it with a green `★ Keep (Best)` badge, and automatically selects all extra redundant copies for one-click deletion.
+  - **📁 Entire Folder / Directory Deletion**: One-click deletion of all duplicate files residing within an entire directory or season folder (e.g. removing a duplicate `Single Episode` or `Combo Packs` folder completely).
+  - **Folder Overview Manager**: View all directories containing duplicate media with file counts and reclaimable GB, with options to batch select or wipe entire folders.
   - **Checkboxes & Batch Actions**: Select specific files, **Select All**, or **Deselect All**.
   - **Real-Time Batch Progress**: Interactive confirmation modal showing files to be removed, total storage to reclaim (GB), and a live animated progress bar executing sequential deletions via the Emby API.
 - **Direct Management & Deletion**:
