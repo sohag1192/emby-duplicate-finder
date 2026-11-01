@@ -1283,9 +1283,54 @@ function copyFolderDeleteCmd() {
     });
 }
 
+function downloadFolderDeleteBat(customDirPath = null) {
+    const dir = customDirPath || pendingFolderDelete?.dirPath;
+    if (!dir) return;
+
+    const isWindows = dir.includes('\\');
+    const content = isWindows
+        ? `@echo off\r\nchcp 65001 > nul\r\necho ========================================================\r\necho Deleting duplicate directory folder from disk:\r\necho "${dir}"\r\necho ========================================================\r\nrd /s /q "${dir}"\r\nif not exist "${dir}" (\r\n    echo.\r\n    echo [SUCCESS] Directory was permanently deleted from your disk!\r\n) else (\r\n    echo.\r\n    echo [NOTICE] Folder could not be removed. Please make sure no files inside are open.\r\n)\r\necho.\r\npause\r\n`
+        : `#!/bin/bash\nrm -rf "${dir}"\necho "Folder removed from disk!"\n`;
+
+    const blob = new Blob([content], { type: 'application/x-bat' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `delete_folder.bat`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('⚡ Downloaded delete_folder.bat! Double-click it to remove the directory from disk.', 'success');
+}
+
 function closeFolderDeleteModal() {
     document.getElementById('folder-delete-modal').classList.add('hidden');
     pendingFolderDelete = null;
+}
+
+// Helper: Delete single item from Emby with retry and status 404 tolerance
+async function deleteEmbyItemWithRetry(itemId, maxRetries = 2) {
+    if (!itemId) return false;
+    const delay = ms => new Promise(res => setTimeout(res, ms));
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const resp = await embyFetch(`/emby/Items/${itemId}?api_key=${appState.apiKey}`, {
+                method: 'DELETE'
+            });
+            if (resp.ok || resp.status === 404) {
+                return true;
+            }
+            console.warn(`DELETE /emby/Items/${itemId} returned HTTP ${resp.status}`);
+        } catch (e) {
+            console.warn(`Delete attempt ${attempt} error for item ${itemId}:`, e);
+        }
+        if (attempt < maxRetries) {
+            await delay(250 * attempt);
+        }
+    }
+    return false;
 }
 
 async function executeDeleteFolder() {
@@ -1303,86 +1348,132 @@ async function executeDeleteFolder() {
     if (cancelBtn) cancelBtn.disabled = true;
     if (progressBox) progressBox.classList.remove('hidden');
 
-    const total = files.length;
-    let completed = 0;
-    let errorCount = 0;
+    const cleanDir = dirPath.replace(/[\\/]+$/, '').toLowerCase();
+    const library = appState.results[libIdx];
+    const delay = ms => new Promise(res => setTimeout(res, ms));
 
     try {
-        // 1. Delete all duplicate media file items in this folder
-        for (let i = 0; i < total; i++) {
-            const item = files[i];
-            try {
-                await embyFetch(`/emby/Items/${item.file.itemId}?api_key=${appState.apiKey}`, {
-                    method: 'DELETE'
+        if (progressText) progressText.textContent = `Deep scanning folder items in Emby...`;
+
+        // Map of items to delete: ItemId -> item object
+        const itemsToDeleteMap = new Map();
+
+        // 1. Add all known duplicate files in this folder
+        files.forEach(f => {
+            if (f.file && f.file.itemId) {
+                itemsToDeleteMap.set(f.file.itemId, {
+                    itemId: f.file.itemId,
+                    name: f.file.name || getFileNameFromPath(f.file.path),
+                    type: 'Media'
                 });
-            } catch (e) {
-                console.error('Delete error for item in folder:', item.file.itemId, e);
-                errorCount++;
             }
-            completed++;
-            const percent = Math.round((completed / (total + (deletePhysicalFolder ? 1 : 0))) * 100);
-            if (progressBar) progressBar.style.width = `${percent}%`;
-            if (progressText) progressText.textContent = `Deleting ${completed} of ${total} files in folder (${percent}%)...`;
-        }
+        });
 
-        // 2. Remove folder item from Emby ONLY if it is a standalone Folder (NEVER Season or Series!)
-        if (deletePhysicalFolder) {
-            if (progressText) progressText.textContent = `Checking folder reference in Emby...`;
-            const cleanDir = dirPath.replace(/[\\/]+$/, '').toLowerCase();
-            const library = appState.results[libIdx];
-
-            if (library && library.libraryId) {
-                try {
-                    // Query only standalone Folder items (NEVER Season or Series)
-                    const folderResp = await embyFetch(`/emby/Items?Recursive=true&ParentId=${library.libraryId}&IncludeItemTypes=Folder&Fields=Path&api_key=${appState.apiKey}`);
-                    const folderData = await folderResp.json();
-                    if (folderData.Items) {
-                        for (const item of folderData.Items) {
-                            if (item.Type === 'Folder' && item.Path && item.Path.replace(/[\\/]+$/, '').toLowerCase() === cleanDir) {
-                                try {
-                                    await embyFetch(`/emby/Items/${item.Id}?api_key=${appState.apiKey}`, {
-                                        method: 'DELETE'
+        // 2. Query Emby library recursively for all items located inside cleanDir
+        if (library && library.libraryId) {
+            try {
+                const scanResp = await embyFetch(`/emby/Items?Recursive=true&ParentId=${library.libraryId}&Fields=Path,Type&api_key=${appState.apiKey}`);
+                const scanData = await scanResp.json();
+                if (scanData && scanData.Items) {
+                    for (const it of scanData.Items) {
+                        if (it.Path) {
+                            const p = it.Path.replace(/[\\/]+$/, '').toLowerCase();
+                            const isShowContainer = (it.Type === 'Series');
+                            if (!isShowContainer && (p === cleanDir || p.startsWith(cleanDir + '\\') || p.startsWith(cleanDir + '/'))) {
+                                if (!itemsToDeleteMap.has(it.Id)) {
+                                    itemsToDeleteMap.set(it.Id, {
+                                        itemId: it.Id,
+                                        name: it.Name || it.Path,
+                                        type: it.Type
                                     });
-                                } catch (folderDelErr) {
-                                    console.warn('Folder item deletion error:', folderDelErr);
                                 }
                             }
                         }
                     }
-                } catch (err) {
-                    console.log('Folder item lookup error:', err);
                 }
+            } catch (scanErr) {
+                console.warn('Deep scan query error (proceeding with known files):', scanErr);
             }
-
-            // Trigger Emby library refresh to clean ghost references
-            try {
-                await embyFetch(`/emby/Library/Refresh?api_key=${appState.apiKey}`, {
-                    method: 'POST'
-                });
-            } catch (e) {}
-
-            if (progressBar) progressBar.style.width = '100%';
         }
 
-        // 3. Remove deleted files from duplicateGroups in local state
-        const cleanTarget = dirPath.replace(/[\\/]+$/, '').toLowerCase();
-        const library = appState.results[libIdx];
+        const itemsList = Array.from(itemsToDeleteMap.values());
+        // Sort items so media files and sub-items are deleted BEFORE folders/seasons
+        itemsList.sort((a, b) => {
+            const isFolderA = (a.type === 'Folder' || a.type === 'Season');
+            const isFolderB = (b.type === 'Folder' || b.type === 'Season');
+            if (isFolderA && !isFolderB) return 1;
+            if (!isFolderA && isFolderB) return -1;
+            return 0;
+        });
+
+        const total = itemsList.length;
+        let completed = 0;
+        let errorCount = 0;
+
+        // 3. Delete each item with retry and throttle to protect Emby SQLite
+        for (let i = 0; i < total; i++) {
+            const it = itemsList[i];
+            const ok = await deleteEmbyItemWithRetry(it.itemId);
+            if (!ok) {
+                errorCount++;
+            } else {
+                completed++;
+            }
+
+            const percent = Math.round(((i + 1) / total) * 90);
+            if (progressBar) progressBar.style.width = `${percent}%`;
+            if (progressText) progressText.textContent = `Deleting ${i + 1} of ${total}: ${it.name || it.itemId} (${percent}%)...`;
+
+            // Throttle 120ms between deletions so Emby SQLite does not lock
+            await delay(120);
+        }
+
+        // 4. Also check standalone Folder items in Emby and refresh library
+        if (deletePhysicalFolder && library && library.libraryId) {
+            if (progressText) progressText.textContent = `Cleaning directory references and refreshing Emby...`;
+            try {
+                const folderResp = await embyFetch(`/emby/Items?Recursive=true&ParentId=${library.libraryId}&IncludeItemTypes=Folder&Fields=Path&api_key=${appState.apiKey}`);
+                const folderData = await folderResp.json();
+                if (folderData && folderData.Items) {
+                    for (const item of folderData.Items) {
+                        if (item.Type === 'Folder' && item.Path && item.Path.replace(/[\\/]+$/, '').toLowerCase() === cleanDir) {
+                            await deleteEmbyItemWithRetry(item.Id);
+                        }
+                    }
+                }
+            } catch (fErr) {
+                console.warn('Folder cleanup error:', fErr);
+            }
+
+            try {
+                await embyFetch(`/emby/Library/Refresh?api_key=${appState.apiKey}`, { method: 'POST' });
+            } catch (e) {}
+
+            // Auto-trigger .bat download so Windows removes the physical directory in 1 click
+            downloadFolderDeleteBat(dirPath);
+        }
+
+        if (progressBar) progressBar.style.width = '100%';
+
+        // 5. Update local state
         if (library) {
             library.duplicateGroups.forEach(group => {
-                group.files = group.files.filter(f => getDirectoryFromPath(f.path).toLowerCase() !== cleanTarget);
+                group.files = group.files.filter(f => {
+                    const fDir = getDirectoryFromPath(f.path).replace(/[\\/]+$/, '').toLowerCase();
+                    return fDir !== cleanDir;
+                });
             });
             library.duplicateGroups = library.duplicateGroups.filter(g => g.files.length > 1);
             library.count = library.duplicateGroups.length;
         }
 
-        // Filter out empty libraries
         appState.results = appState.results.filter(lib => lib.duplicateGroups && lib.duplicateGroups.length > 0);
         appState.selectedFiles.clear();
 
         if (errorCount === 0) {
-            showToast(`🎉 Successfully deleted all ${total} files in folder!`, 'success');
+            showToast(`🎉 Successfully deleted all ${completed} items in folder! Downloaded .bat to wipe directory from disk.`, 'success');
         } else {
-            showToast(`Folder delete finished: ${total - errorCount} deleted, ${errorCount} failed.`, 'warning');
+            showToast(`Folder delete finished: ${completed} deleted, ${errorCount} failed. Use downloaded .bat to force-delete folder.`, 'warning');
         }
 
     } catch (fatalErr) {
@@ -1681,6 +1772,46 @@ function copyBatchFolderCmd() {
     });
 }
 
+function downloadBatchFoldersDeleteBat() {
+    const folders = getUniqueDuplicateFolders();
+    const selectedList = folders.filter(f => selectedBatchFolders.has(f.dirPath));
+    if (selectedList.length === 0) {
+        showToast('Please select at least one folder first.', 'warning');
+        return;
+    }
+
+    const isWindows = selectedList.some(f => f.dirPath.includes('\\'));
+    let content = '';
+
+    if (isWindows) {
+        content = `@echo off\r\nchcp 65001 > nul\r\ntitle Emby Duplicate Folders Cleaner\r\necho ========================================================\r\necho Permanently deleting ${selectedList.length} duplicate folders from disk...\r\necho ========================================================\r\necho.\r\n`;
+        selectedList.forEach(item => {
+            content += `echo Removing: "${item.dirPath}"\r\n`;
+            content += `rd /s /q "${item.dirPath}"\r\n`;
+        });
+        content += `\r\necho.\r\necho ========================================================\r\necho [SUCCESS] Batch directory cleanup finished!\r\necho ========================================================\r\necho.\r\npause\r\n`;
+    } else {
+        content = `#!/bin/bash\necho "Permanently deleting ${selectedList.length} duplicate folders..."\n`;
+        selectedList.forEach(item => {
+            content += `rm -rf "${item.dirPath}"\n`;
+        });
+        content += `echo "Batch cleanup finished!"\n`;
+    }
+
+    const filename = isWindows ? 'batch_delete_folders.bat' : 'batch_delete_folders.sh';
+    const mime = isWindows ? 'application/x-bat' : 'application/x-sh';
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast(`⚡ Downloaded ${filename}! Double-click it to remove all ${selectedList.length} folders from disk.`, 'success');
+}
+
 function closeBatchFolderDeleteModal() {
     const modal = document.getElementById('batch-folder-delete-modal');
     if (modal) modal.classList.add('hidden');
@@ -1702,82 +1833,127 @@ async function executeBatchDeleteFolders() {
     if (cancelBtn) cancelBtn.disabled = true;
     if (progressBox) progressBox.classList.remove('hidden');
 
-    // Gather all files to delete across selected folders
-    const allFilesToDelete = [];
-    selectedList.forEach(folderItem => {
-        folderItem.files.forEach(fObj => {
-            allFilesToDelete.push({
-                file: fObj.file,
-                dirPath: folderItem.dirPath,
-                libIdx: folderItem.libIdx
-            });
-        });
-    });
-
-    const total = allFilesToDelete.length;
-    let completed = 0;
-    let errorCount = 0;
+    const delay = ms => new Promise(res => setTimeout(res, ms));
 
     try {
-        // 1. Delete all duplicate media file items across selected folders
-        for (let i = 0; i < total; i++) {
-            const item = allFilesToDelete[i];
+        if (progressText) progressText.textContent = `Deep scanning items across ${selectedList.length} folders...`;
+
+        const itemsToDeleteMap = new Map();
+        const selectedDirSet = new Set(selectedList.map(f => f.dirPath.replace(/[\\/]+$/, '').toLowerCase()));
+
+        // 1. Gather all files already known in selected folders
+        selectedList.forEach(folderItem => {
+            folderItem.files.forEach(fObj => {
+                if (fObj.file && fObj.file.itemId) {
+                    itemsToDeleteMap.set(fObj.file.itemId, {
+                        itemId: fObj.file.itemId,
+                        name: fObj.file.name || getFileNameFromPath(fObj.file.path),
+                        type: 'Media'
+                    });
+                }
+            });
+        });
+
+        // 2. Query Emby libraries involved for any other items residing inside any selectedDirSet
+        const involvedLibIds = new Set(selectedList.map(f => {
+            const lib = appState.results[f.libIdx];
+            return lib ? lib.libraryId : null;
+        }).filter(Boolean));
+
+        for (const libId of involvedLibIds) {
             try {
-                await embyFetch(`/emby/Items/${item.file.itemId}?api_key=${appState.apiKey}`, {
-                    method: 'DELETE'
-                });
-            } catch (e) {
-                console.error('Delete error for item in batch folder:', item.file.itemId, e);
-                errorCount++;
-            }
-            completed++;
-            const percent = Math.round((completed / (total + (deletePhysicalFolder ? selectedList.length : 0))) * 100);
-            if (progressBar) progressBar.style.width = `${percent}%`;
-            if (progressText) progressText.textContent = `Deleting ${completed} of ${total} files in ${selectedList.length} folders (${percent}%)...`;
-        }
-
-        // 2. Remove standalone folder references from Emby if checked
-        if (deletePhysicalFolder) {
-            if (progressText) progressText.textContent = `Cleaning folder references from Emby library...`;
-
-            for (const folderItem of selectedList) {
-                const cleanDir = folderItem.dirPath.replace(/[\\/]+$/, '').toLowerCase();
-                const library = appState.results[folderItem.libIdx];
-
-                if (library && library.libraryId) {
-                    try {
-                        const folderResp = await embyFetch(`/emby/Items?Recursive=true&ParentId=${library.libraryId}&IncludeItemTypes=Folder&Fields=Path&api_key=${appState.apiKey}`);
-                        const folderData = await folderResp.json();
-                        if (folderData.Items) {
-                            for (const item of folderData.Items) {
-                                if (item.Type === 'Folder' && item.Path && item.Path.replace(/[\\/]+$/, '').toLowerCase() === cleanDir) {
-                                    try {
-                                        await embyFetch(`/emby/Items/${item.Id}?api_key=${appState.apiKey}`, {
-                                            method: 'DELETE'
-                                        });
-                                    } catch (folderDelErr) {
-                                        console.warn('Folder item deletion error:', folderDelErr);
+                const scanResp = await embyFetch(`/emby/Items?Recursive=true&ParentId=${libId}&Fields=Path,Type&api_key=${appState.apiKey}`);
+                const scanData = await scanResp.json();
+                if (scanData && scanData.Items) {
+                    for (const it of scanData.Items) {
+                        if (it.Path) {
+                            const p = it.Path.replace(/[\\/]+$/, '').toLowerCase();
+                            const isShowContainer = (it.Type === 'Series');
+                            if (!isShowContainer) {
+                                for (const cleanDir of selectedDirSet) {
+                                    if (p === cleanDir || p.startsWith(cleanDir + '\\') || p.startsWith(cleanDir + '/')) {
+                                        if (!itemsToDeleteMap.has(it.Id)) {
+                                            itemsToDeleteMap.set(it.Id, {
+                                                itemId: it.Id,
+                                                name: it.Name || it.Path,
+                                                type: it.Type
+                                            });
+                                        }
+                                        break;
                                     }
                                 }
                             }
                         }
-                    } catch (err) {
-                        console.log('Folder lookup error:', err);
                     }
+                }
+            } catch (scanErr) {
+                console.warn('Batch deep scan query error for library:', libId, scanErr);
+            }
+        }
+
+        const itemsList = Array.from(itemsToDeleteMap.values());
+        itemsList.sort((a, b) => {
+            const isFolderA = (a.type === 'Folder' || a.type === 'Season');
+            const isFolderB = (b.type === 'Folder' || b.type === 'Season');
+            if (isFolderA && !isFolderB) return 1;
+            if (!isFolderA && isFolderB) return -1;
+            return 0;
+        });
+
+        const total = itemsList.length;
+        let completed = 0;
+        let errorCount = 0;
+
+        // 3. Delete items with retry and 120ms throttle
+        for (let i = 0; i < total; i++) {
+            const it = itemsList[i];
+            const ok = await deleteEmbyItemWithRetry(it.itemId);
+            if (!ok) {
+                errorCount++;
+            } else {
+                completed++;
+            }
+
+            const percent = Math.round(((i + 1) / total) * 90);
+            if (progressBar) progressBar.style.width = `${percent}%`;
+            if (progressText) progressText.textContent = `Deleting ${i + 1} of ${total}: ${it.name || it.itemId} (${percent}%)...`;
+
+            await delay(120);
+        }
+
+        // 4. Folder references & refresh
+        if (deletePhysicalFolder) {
+            if (progressText) progressText.textContent = `Cleaning folder references and refreshing Emby libraries...`;
+            for (const libId of involvedLibIds) {
+                try {
+                    const folderResp = await embyFetch(`/emby/Items?Recursive=true&ParentId=${libId}&IncludeItemTypes=Folder&Fields=Path&api_key=${appState.apiKey}`);
+                    const folderData = await folderResp.json();
+                    if (folderData && folderData.Items) {
+                        for (const item of folderData.Items) {
+                            if (item.Type === 'Folder' && item.Path) {
+                                const cleanFolder = item.Path.replace(/[\\/]+$/, '').toLowerCase();
+                                if (selectedDirSet.has(cleanFolder)) {
+                                    await deleteEmbyItemWithRetry(item.Id);
+                                }
+                            }
+                        }
+                    }
+                } catch (fErr) {
+                    console.warn('Batch folder cleanup error:', fErr);
                 }
             }
 
             try {
-                await embyFetch(`/emby/Library/Refresh?api_key=${appState.apiKey}`, {
-                    method: 'POST'
-                });
+                await embyFetch(`/emby/Library/Refresh?api_key=${appState.apiKey}`, { method: 'POST' });
             } catch (e) {}
 
-            if (progressBar) progressBar.style.width = '100%';
+            // Auto-trigger batch .bat download to wipe all selected folders from Windows disk
+            downloadBatchFoldersDeleteBat();
         }
 
-        // 3. Remove deleted files from appState.results duplicate groups
-        const selectedDirSet = new Set(selectedList.map(f => f.dirPath.replace(/[\\/]+$/, '').toLowerCase()));
+        if (progressBar) progressBar.style.width = '100%';
+
+        // 5. Update local state
         appState.results.forEach(library => {
             library.duplicateGroups.forEach(group => {
                 group.files = group.files.filter(file => {
@@ -1789,15 +1965,14 @@ async function executeBatchDeleteFolders() {
             library.count = library.duplicateGroups.length;
         });
 
-        // Clean up empty libraries
         appState.results = appState.results.filter(lib => lib.duplicateGroups && lib.duplicateGroups.length > 0);
         appState.selectedFiles.clear();
         selectedBatchFolders.clear();
 
         if (errorCount === 0) {
-            showToast(`🎉 Successfully deleted all duplicate files in ${selectedList.length} folders!`, 'success');
+            showToast(`🎉 Successfully deleted all ${completed} items across ${selectedList.length} folders! Downloaded batch .bat to wipe directories from disk.`, 'success');
         } else {
-            showToast(`Batch folder delete finished: ${total - errorCount} deleted, ${errorCount} failed.`, 'warning');
+            showToast(`Batch folder delete finished: ${completed} deleted, ${errorCount} failed. Use downloaded batch .bat to force-delete folders.`, 'warning');
         }
 
     } catch (fatalErr) {
@@ -1813,7 +1988,6 @@ async function executeBatchDeleteFolders() {
         handleSearchFilter();
         updateSelectionUI();
 
-        // Refresh or close folders manager
         const remainingFolders = getUniqueDuplicateFolders();
         if (remainingFolders.length > 0) {
             renderFoldersManagerList(remainingFolders);
