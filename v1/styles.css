@@ -1418,11 +1418,18 @@ footer {
 }
 
 
-/* Scroll to Top Floating Button */
-.scroll-to-top {
+/* Floating Scroll Navigation Group (Top & Bottom) */
+.scroll-nav-group {
     position: fixed;
     bottom: 28px;
     right: 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 2500;
+}
+
+.scroll-nav-btn {
     width: 46px;
     height: 46px;
     border-radius: 50%;
@@ -1438,33 +1445,32 @@ footer {
     font-weight: 700;
     opacity: 0;
     visibility: hidden;
-    transform: translateY(20px) scale(0.85);
+    transform: translateY(15px) scale(0.9);
     transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1),
                 transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
                 visibility 0.3s,
                 box-shadow 0.25s ease,
                 background 0.25s ease;
-    z-index: 2500;
     backdrop-filter: blur(8px);
 }
 
-.scroll-to-top.visible {
+.scroll-nav-btn.visible {
     opacity: 1;
     visibility: visible;
     transform: translateY(0) scale(1);
 }
 
-.scroll-to-top:hover {
+.scroll-nav-btn:hover {
     background: linear-gradient(135deg, #22d3ee 0%, #60a5fa 100%);
     box-shadow: 0 12px 32px rgba(6, 182, 212, 0.65), 0 0 24px rgba(59, 130, 246, 0.5);
-    transform: translateY(-4px) scale(1.08);
+    transform: translateY(-3px) scale(1.08);
 }
 
-.scroll-to-top:active {
+.scroll-nav-btn:active {
     transform: translateY(0) scale(0.95);
 }
 
-.scroll-to-top .scroll-arrow {
+.scroll-nav-btn .scroll-arrow {
     line-height: 1;
     display: inline-block;
     transition: transform 0.2s ease;
@@ -1474,10 +1480,17 @@ footer {
     transform: translateY(-2px);
 }
 
+.scroll-to-bottom:hover .scroll-arrow {
+    transform: translateY(2px);
+}
+
 @media (max-width: 640px) {
-    .scroll-to-top {
+    .scroll-nav-group {
         bottom: 20px;
         right: 20px;
+        gap: 8px;
+    }
+    .scroll-nav-btn {
         width: 42px;
         height: 42px;
         font-size: 14px;
@@ -1761,6 +1774,50 @@ footer {
 }
 
 /* Folders Manager List & Cards */
+.folders-manager-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    background: rgba(14, 20, 32, 0.95);
+    border: 1px solid rgba(56, 189, 248, 0.25);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    margin: 12px 0 16px;
+}
+
+.folders-toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 260px;
+}
+
+.folders-search-input {
+    background: #0b101a;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: #f1f5f9;
+    padding: 6px 12px;
+    font-size: 12.5px;
+    flex: 1;
+    min-width: 140px;
+}
+
+.folders-search-input:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+.folders-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
 .folders-manager-list {
     display: flex;
     flex-direction: column;
@@ -1782,6 +1839,26 @@ footer {
     gap: 16px;
     flex-wrap: wrap;
     transition: all 0.2s ease;
+}
+
+.folder-manager-card.is-selected {
+    border-color: rgba(6, 182, 212, 0.7);
+    background: rgba(6, 182, 212, 0.08);
+    box-shadow: 0 0 16px rgba(6, 182, 212, 0.2);
+}
+
+.folder-select-checkbox {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    margin-right: 4px;
+}
+
+.folder-select-checkbox input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #06b6d4;
+    cursor: pointer;
 }
 
 .folder-manager-card:hover {

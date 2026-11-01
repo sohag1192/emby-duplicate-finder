@@ -173,6 +173,7 @@
             <div class="filter-actions">
                 <button class="btn-secondary btn-sm" onclick="expandAllLibraries()">Expand All</button>
                 <button class="btn-secondary btn-sm" onclick="collapseAllLibraries()">Collapse All</button>
+                <button class="btn-secondary btn-sm" onclick="scrollToBottom()" title="Scroll all the way down">⬇ Scroll to Bottom</button>
             </div>
         </div>
 
@@ -365,11 +366,86 @@
                 <button class="modal-close" onclick="closeFoldersManagerModal()">&times;</button>
             </div>
             <div class="modal-body">
-                <p>Here are all the directories on your server that contain duplicate files. You can select all files in a folder or delete an entire folder at once:</p>
+                <p>Here are all the directories on your server that contain duplicate files. Select multiple folders below to batch delete all duplicates in them at once:</p>
+
+                <!-- Batch Folders Toolbar -->
+                <div class="folders-manager-toolbar">
+                    <div class="folders-toolbar-left">
+                        <input type="text" id="foldersFilterInput" class="folders-search-input" placeholder="🔍 Filter folders by path..." oninput="handleFoldersFilter()">
+                        <button type="button" class="btn-secondary btn-sm" onclick="selectAllFoldersForBatch()">☑️ Select All</button>
+                        <button type="button" class="btn-secondary btn-sm" onclick="deselectAllFoldersForBatch()">◻️ Deselect All</button>
+                    </div>
+                    <div class="folders-toolbar-right">
+                        <span class="selection-count-pill" id="selectedFoldersBadge">0 folders selected</span>
+                        <span class="selection-size-pill" id="selectedFoldersSizeBadge">0 B</span>
+                        <button type="button" id="btnBatchDeleteFolders" class="btn-danger btn-sm" onclick="promptBatchDeleteFolders()" disabled>
+                            🗑️ Delete Selected Folders
+                        </button>
+                    </div>
+                </div>
+
                 <div id="foldersManagerList" class="folders-manager-list"></div>
             </div>
+            <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+                <span id="foldersTotalSummary" class="helper-text" style="font-size: 13px;"></span>
+                <div style="display: flex; gap: 10px;">
+                    <button type="button" class="btn-secondary" onclick="closeFoldersManagerModal()">Close</button>
+                    <button type="button" id="btnBatchDeleteFoldersFooter" class="btn-danger" onclick="promptBatchDeleteFolders()" disabled>
+                        🗑️ Delete Selected Folders (0)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Batch Folder Delete Confirmation Modal -->
+    <div id="batch-folder-delete-modal" class="modal-overlay hidden">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3>📁 Confirm Batch Folder Deletion</h3>
+                <button class="modal-close" onclick="closeBatchFolderDeleteModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>You are about to permanently delete <strong>all duplicate files</strong> in the following selected directories:</p>
+
+                <div class="batch-delete-summary">
+                    <div class="summary-chip danger"><strong>Selected Folders:</strong> <span id="batchFolderCount">0</span></div>
+                    <div class="summary-chip danger"><strong>Total Files:</strong> <span id="batchFolderFilesCount">0</span></div>
+                    <div class="summary-chip success"><strong>Total Reclaimable Space:</strong> <span id="batchFolderTotalSize">0 B</span></div>
+                </div>
+
+                <div class="batch-items-preview-box">
+                    <ul id="batchFolderPreviewList" class="batch-preview-list"></ul>
+                </div>
+
+                <div class="checkbox-group mt-10 mb-10">
+                    <label class="custom-checkbox">
+                        <input type="checkbox" id="chkBatchAlsoDeletePhysicalDir" checked>
+                        <span class="checkmark"></span>
+                        <strong>Also clean folder references in Emby library</strong>
+                    </label>
+                </div>
+
+                <div class="cmd-copy-box">
+                    <span>Quick CMD commands to force-remove all selected directories from Windows:</span>
+                    <div class="cmd-row" style="align-items: flex-start;">
+                        <textarea id="batchFolderCmdText" readonly style="flex: 1; background: transparent; border: none; color: #38bdf8; font-family: var(--font-mono); font-size: 11px; resize: vertical; min-height: 52px; outline: none;"></textarea>
+                        <button type="button" class="btn-secondary btn-sm" onclick="copyBatchFolderCmd()">📋 Copy Batch CMD</button>
+                    </div>
+                </div>
+
+                <div id="batchFolderProgressContainer" class="progress-box hidden">
+                    <div class="progress-bar-track">
+                        <div id="batchFolderProgressBar" class="progress-bar-fill"></div>
+                    </div>
+                    <p id="batchFolderProgressText">Deleting files in selected folders...</p>
+                </div>
+
+                <p class="text-danger"><small>⚠️ Warning: This will permanently delete all duplicate files across these selected folders.</small></p>
+            </div>
             <div class="modal-footer">
-                <button class="btn-secondary" onclick="closeFoldersManagerModal()">Close</button>
+                <button id="cancelBatchFolderBtn" class="btn-secondary" onclick="closeBatchFolderDeleteModal()">Cancel</button>
+                <button id="confirmBatchFolderBtn" class="btn-danger" onclick="executeBatchDeleteFolders()">Confirm & Delete All Selected Folders</button>
             </div>
         </div>
     </div>
@@ -428,10 +504,15 @@
     <!-- Toast Notification Container -->
     <div id="toast-container"></div>
 
-    <!-- Scroll to Top Floating Button -->
-    <button id="scrollToTopBtn" class="scroll-to-top" title="Scroll to Top" aria-label="Scroll to Top">
-        <span class="scroll-arrow">▲</span>
-    </button>
+    <!-- Floating Scroll Navigation Group (Top & Bottom) -->
+    <div class="scroll-nav-group">
+        <button id="scrollToTopBtn" class="scroll-nav-btn scroll-to-top" title="Scroll to Top" aria-label="Scroll to Top">
+            <span class="scroll-arrow">▲</span>
+        </button>
+        <button id="scrollToBottomBtn" class="scroll-nav-btn scroll-to-bottom" title="Scroll all the way down" aria-label="Scroll all the way down">
+            <span class="scroll-arrow">▼</span>
+        </button>
+    </div>
 
     <script src="script.js"></script>
 </body>

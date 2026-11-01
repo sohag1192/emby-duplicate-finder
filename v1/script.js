@@ -1448,30 +1448,72 @@ function selectAllInFolder(libIdx, encodedDirPath) {
     showToast(`Selected all ${files.length} duplicate files in folder: ${dirPath}`, 'info');
 }
 
+// ==========================================
+// Batch Folder Selection & Deletion System
+// ==========================================
+const selectedBatchFolders = new Set(); // Stores directory path strings
+
 function promptManageFolders() {
     const folders = getUniqueDuplicateFolders();
     const modal = document.getElementById('folders-manager-modal');
-    const list = document.getElementById('foldersManagerList');
 
     if (folders.length === 0) {
         showToast('No folders with duplicate files found.', 'info');
         return;
     }
 
+    // Filter out any stale folder paths
+    const currentFolderPaths = new Set(folders.map(f => f.dirPath.toLowerCase()));
+    for (const p of selectedBatchFolders) {
+        if (!currentFolderPaths.has(p.toLowerCase())) {
+            selectedBatchFolders.delete(p);
+        }
+    }
+
+    renderFoldersManagerList(folders);
+    updateBatchFoldersUI(folders);
+
+    modal.classList.remove('hidden');
+}
+
+function renderFoldersManagerList(folders) {
+    const list = document.getElementById('foldersManagerList');
+    if (!list) return;
     list.innerHTML = '';
+
+    const filterTerm = (document.getElementById('foldersFilterInput')?.value || '').trim().toLowerCase();
+    let totalAllBytes = 0;
+    let totalAllFiles = 0;
+
     folders.forEach(f => {
+        totalAllBytes += (f.totalBytes || 0);
+        totalAllFiles += f.files.length;
+
+        const matches = !filterTerm || f.dirPath.toLowerCase().includes(filterTerm) || f.libName.toLowerCase().includes(filterTerm);
+        if (!matches) return;
+
+        const isChecked = selectedBatchFolders.has(f.dirPath);
         const card = document.createElement('div');
-        card.className = 'folder-manager-card';
+        card.className = `folder-manager-card ${isChecked ? 'is-selected' : ''}`;
+        card.id = `folder-card-${encodeURIComponent(f.dirPath).replace(/%/g, '_')}`;
+
         card.innerHTML = `
-            <div class="folder-manager-info">
-                <div class="folder-manager-path">
-                    <span style="font-size: 16px;">📁</span>
-                    <strong>${escapeHtml(f.dirPath)}</strong>
-                </div>
-                <div class="folder-manager-meta">
-                    <span class="meta-chip">${escapeHtml(f.libName)}</span>
-                    <span class="meta-chip danger">${f.files.length} Duplicate Files</span>
-                    <span class="meta-chip success">${formatBytes(f.totalBytes)}</span>
+            <div style="display: flex; align-items: flex-start; gap: 12px; flex: 1; min-width: 260px;">
+                <label class="folder-select-checkbox" title="Select folder for batch deletion">
+                    <input type="checkbox" class="file-checkbox folder-batch-chk" 
+                           ${isChecked ? 'checked' : ''} 
+                           onchange="toggleFolderBatchSelection('${encodeURIComponent(f.dirPath)}', this.checked)">
+                </label>
+                <div class="folder-manager-info">
+                    <div class="folder-manager-path">
+                        <span style="font-size: 16px;">📁</span>
+                        <strong>${escapeHtml(f.dirPath)}</strong>
+                    </div>
+                    <div class="folder-manager-meta">
+                        <span class="meta-chip">${escapeHtml(f.libName)}</span>
+                        <span class="meta-chip danger">${f.files.length} Duplicate Files</span>
+                        <span class="meta-chip success">${formatBytes(f.totalBytes)}</span>
+                    </div>
                 </div>
             </div>
             <div class="folder-manager-actions">
@@ -1486,11 +1528,300 @@ function promptManageFolders() {
         list.appendChild(card);
     });
 
-    modal.classList.remove('hidden');
+    const summaryElem = document.getElementById('foldersTotalSummary');
+    if (summaryElem) {
+        summaryElem.textContent = `Total: ${folders.length} duplicate folders (${totalAllFiles} files • ${formatBytes(totalAllBytes)})`;
+    }
+}
+
+function handleFoldersFilter() {
+    const folders = getUniqueDuplicateFolders();
+    renderFoldersManagerList(folders);
+}
+
+function toggleFolderBatchSelection(encodedDirPath, isChecked) {
+    const dirPath = decodeURIComponent(encodedDirPath);
+    if (isChecked) {
+        selectedBatchFolders.add(dirPath);
+    } else {
+        selectedBatchFolders.delete(dirPath);
+    }
+
+    const cardId = `folder-card-${encodedDirPath.replace(/%/g, '_')}`;
+    const card = document.getElementById(cardId);
+    if (card) {
+        card.classList.toggle('is-selected', isChecked);
+        const chk = card.querySelector('.folder-batch-chk');
+        if (chk) chk.checked = isChecked;
+    }
+
+    const folders = getUniqueDuplicateFolders();
+    updateBatchFoldersUI(folders);
+}
+
+function selectAllFoldersForBatch() {
+    const folders = getUniqueDuplicateFolders();
+    const filterTerm = (document.getElementById('foldersFilterInput')?.value || '').trim().toLowerCase();
+
+    folders.forEach(f => {
+        if (!filterTerm || f.dirPath.toLowerCase().includes(filterTerm) || f.libName.toLowerCase().includes(filterTerm)) {
+            selectedBatchFolders.add(f.dirPath);
+        }
+    });
+
+    renderFoldersManagerList(folders);
+    updateBatchFoldersUI(folders);
+}
+
+function deselectAllFoldersForBatch() {
+    selectedBatchFolders.clear();
+    const folders = getUniqueDuplicateFolders();
+    renderFoldersManagerList(folders);
+    updateBatchFoldersUI(folders);
+}
+
+function updateBatchFoldersUI(folders = null) {
+    if (!folders) folders = getUniqueDuplicateFolders();
+
+    const count = selectedBatchFolders.size;
+    let totalBytes = 0;
+    let totalFiles = 0;
+
+    folders.forEach(f => {
+        if (selectedBatchFolders.has(f.dirPath)) {
+            totalBytes += (f.totalBytes || 0);
+            totalFiles += f.files.length;
+        }
+    });
+
+    const badge = document.getElementById('selectedFoldersBadge');
+    const sizeBadge = document.getElementById('selectedFoldersSizeBadge');
+    const btnTop = document.getElementById('btnBatchDeleteFolders');
+    const btnFooter = document.getElementById('btnBatchDeleteFoldersFooter');
+
+    if (badge) badge.textContent = `${count} ${count === 1 ? 'folder' : 'folders'} selected`;
+    if (sizeBadge) sizeBadge.textContent = formatBytes(totalBytes);
+
+    const btnText = `🗑️ Delete Selected Folders (${count})`;
+    if (btnTop) {
+        btnTop.disabled = (count === 0);
+        btnTop.innerHTML = btnText;
+    }
+    if (btnFooter) {
+        btnFooter.disabled = (count === 0);
+        btnFooter.innerHTML = btnText;
+    }
 }
 
 function closeFoldersManagerModal() {
-    document.getElementById('folders-manager-modal').classList.add('hidden');
+    const modal = document.getElementById('folders-manager-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+// Batch Folder Delete Confirmation & Execution
+function promptBatchDeleteFolders() {
+    if (selectedBatchFolders.size === 0) {
+        showToast('Please select at least one folder to delete.', 'warning');
+        return;
+    }
+
+    const folders = getUniqueDuplicateFolders();
+    const selectedList = folders.filter(f => selectedBatchFolders.has(f.dirPath));
+    if (selectedList.length === 0) return;
+
+    let totalFiles = 0;
+    let totalBytes = 0;
+    const cmdLines = [];
+
+    const list = document.getElementById('batchFolderPreviewList');
+    if (list) list.innerHTML = '';
+
+    selectedList.forEach(item => {
+        totalFiles += item.files.length;
+        totalBytes += item.totalBytes;
+
+        const isWindows = item.dirPath.includes('\\');
+        cmdLines.push(isWindows ? `rd /s /q "${item.dirPath}"` : `rm -rf "${item.dirPath}"`);
+
+        if (list) {
+            const li = document.createElement('li');
+            li.className = 'batch-preview-item';
+            li.innerHTML = `
+                <span><strong>📁 ${escapeHtml(item.dirPath)}</strong> (${escapeHtml(item.libName)})</span>
+                <span class="batch-preview-size">${item.files.length} files • ${formatBytes(item.totalBytes)}</span>
+            `;
+            list.appendChild(li);
+        }
+    });
+
+    const countElem = document.getElementById('batchFolderCount');
+    const filesElem = document.getElementById('batchFolderFilesCount');
+    const sizeElem = document.getElementById('batchFolderTotalSize');
+    const cmdElem = document.getElementById('batchFolderCmdText');
+    const progressBox = document.getElementById('batchFolderProgressContainer');
+
+    if (countElem) countElem.textContent = selectedList.length;
+    if (filesElem) filesElem.textContent = totalFiles;
+    if (sizeElem) sizeElem.textContent = formatBytes(totalBytes);
+    if (cmdElem) cmdElem.value = cmdLines.join('\n');
+    if (progressBox) progressBox.classList.add('hidden');
+
+    const modal = document.getElementById('batch-folder-delete-modal');
+    if (modal) modal.classList.remove('hidden');
+}
+
+function copyBatchFolderCmd() {
+    const cmdElem = document.getElementById('batchFolderCmdText');
+    if (!cmdElem || !cmdElem.value) return;
+    const cmd = cmdElem.value;
+    navigator.clipboard.writeText(cmd).then(() => {
+        showToast(`📋 Copied ${selectedBatchFolders.size} folder delete commands to clipboard!`, 'success');
+    }).catch(() => {
+        prompt('Copy delete commands:', cmd);
+    });
+}
+
+function closeBatchFolderDeleteModal() {
+    const modal = document.getElementById('batch-folder-delete-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+async function executeBatchDeleteFolders() {
+    const folders = getUniqueDuplicateFolders();
+    const selectedList = folders.filter(f => selectedBatchFolders.has(f.dirPath));
+    if (selectedList.length === 0) return;
+
+    const confirmBtn = document.getElementById('confirmBatchFolderBtn');
+    const cancelBtn = document.getElementById('cancelBatchFolderBtn');
+    const progressBox = document.getElementById('batchFolderProgressContainer');
+    const progressBar = document.getElementById('batchFolderProgressBar');
+    const progressText = document.getElementById('batchFolderProgressText');
+    const deletePhysicalFolder = document.getElementById('chkBatchAlsoDeletePhysicalDir')?.checked ?? true;
+
+    if (confirmBtn) confirmBtn.disabled = true;
+    if (cancelBtn) cancelBtn.disabled = true;
+    if (progressBox) progressBox.classList.remove('hidden');
+
+    // Gather all files to delete across selected folders
+    const allFilesToDelete = [];
+    selectedList.forEach(folderItem => {
+        folderItem.files.forEach(fObj => {
+            allFilesToDelete.push({
+                file: fObj.file,
+                dirPath: folderItem.dirPath,
+                libIdx: folderItem.libIdx
+            });
+        });
+    });
+
+    const total = allFilesToDelete.length;
+    let completed = 0;
+    let errorCount = 0;
+
+    try {
+        // 1. Delete all duplicate media file items across selected folders
+        for (let i = 0; i < total; i++) {
+            const item = allFilesToDelete[i];
+            try {
+                await embyFetch(`/emby/Items/${item.file.itemId}?api_key=${appState.apiKey}`, {
+                    method: 'DELETE'
+                });
+            } catch (e) {
+                console.error('Delete error for item in batch folder:', item.file.itemId, e);
+                errorCount++;
+            }
+            completed++;
+            const percent = Math.round((completed / (total + (deletePhysicalFolder ? selectedList.length : 0))) * 100);
+            if (progressBar) progressBar.style.width = `${percent}%`;
+            if (progressText) progressText.textContent = `Deleting ${completed} of ${total} files in ${selectedList.length} folders (${percent}%)...`;
+        }
+
+        // 2. Remove standalone folder references from Emby if checked
+        if (deletePhysicalFolder) {
+            if (progressText) progressText.textContent = `Cleaning folder references from Emby library...`;
+
+            for (const folderItem of selectedList) {
+                const cleanDir = folderItem.dirPath.replace(/[\\/]+$/, '').toLowerCase();
+                const library = appState.results[folderItem.libIdx];
+
+                if (library && library.libraryId) {
+                    try {
+                        const folderResp = await embyFetch(`/emby/Items?Recursive=true&ParentId=${library.libraryId}&IncludeItemTypes=Folder&Fields=Path&api_key=${appState.apiKey}`);
+                        const folderData = await folderResp.json();
+                        if (folderData.Items) {
+                            for (const item of folderData.Items) {
+                                if (item.Type === 'Folder' && item.Path && item.Path.replace(/[\\/]+$/, '').toLowerCase() === cleanDir) {
+                                    try {
+                                        await embyFetch(`/emby/Items/${item.Id}?api_key=${appState.apiKey}`, {
+                                            method: 'DELETE'
+                                        });
+                                    } catch (folderDelErr) {
+                                        console.warn('Folder item deletion error:', folderDelErr);
+                                    }
+                                }
+                            }
+                        }
+                    } catch (err) {
+                        console.log('Folder lookup error:', err);
+                    }
+                }
+            }
+
+            try {
+                await embyFetch(`/emby/Library/Refresh?api_key=${appState.apiKey}`, {
+                    method: 'POST'
+                });
+            } catch (e) {}
+
+            if (progressBar) progressBar.style.width = '100%';
+        }
+
+        // 3. Remove deleted files from appState.results duplicate groups
+        const selectedDirSet = new Set(selectedList.map(f => f.dirPath.replace(/[\\/]+$/, '').toLowerCase()));
+        appState.results.forEach(library => {
+            library.duplicateGroups.forEach(group => {
+                group.files = group.files.filter(file => {
+                    const fileDir = getDirectoryFromPath(file.path).replace(/[\\/]+$/, '').toLowerCase();
+                    return !selectedDirSet.has(fileDir);
+                });
+            });
+            library.duplicateGroups = library.duplicateGroups.filter(g => g.files.length > 1);
+            library.count = library.duplicateGroups.length;
+        });
+
+        // Clean up empty libraries
+        appState.results = appState.results.filter(lib => lib.duplicateGroups && lib.duplicateGroups.length > 0);
+        appState.selectedFiles.clear();
+        selectedBatchFolders.clear();
+
+        if (errorCount === 0) {
+            showToast(`🎉 Successfully deleted all duplicate files in ${selectedList.length} folders!`, 'success');
+        } else {
+            showToast(`Batch folder delete finished: ${total - errorCount} deleted, ${errorCount} failed.`, 'warning');
+        }
+
+    } catch (fatalErr) {
+        console.error('Fatal batch folder delete error:', fatalErr);
+        showToast(`Batch folder delete error: ${fatalErr.message}`, 'error');
+    } finally {
+        if (confirmBtn) confirmBtn.disabled = false;
+        if (cancelBtn) cancelBtn.disabled = false;
+        closeBatchFolderDeleteModal();
+
+        if (typeof calculateStats === 'function') calculateStats();
+        displayResults();
+        handleSearchFilter();
+        updateSelectionUI();
+
+        // Refresh or close folders manager
+        const remainingFolders = getUniqueDuplicateFolders();
+        if (remainingFolders.length > 0) {
+            renderFoldersManagerList(remainingFolders);
+            updateBatchFoldersUI(remainingFolders);
+        } else {
+            closeFoldersManagerModal();
+        }
+    }
 }
 
 // Download Report File (.txt)
@@ -1592,23 +1923,65 @@ async function copyFilePath(encodedPath) {
     }
 }
 
-// Scroll to Top Handler
-document.addEventListener('DOMContentLoaded', () => {
-    const scrollToTopBtn = document.getElementById('scrollToTopBtn');
-    if (!scrollToTopBtn) return;
-
-    window.addEventListener('scroll', () => {
-        if (window.scrollY > 280) {
-            scrollToTopBtn.classList.add('visible');
-        } else {
-            scrollToTopBtn.classList.remove('visible');
-        }
-    }, { passive: true });
-
-    scrollToTopBtn.addEventListener('click', () => {
-        window.scrollTo({
-            top: 0,
-            behavior: 'smooth'
-        });
+// ==========================================
+// Scroll Navigation (Top & Bottom)
+// ==========================================
+function scrollToTop() {
+    window.scrollTo({
+        top: 0,
+        behavior: 'smooth'
     });
+}
+
+function scrollToBottom() {
+    window.scrollTo({
+        top: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight),
+        behavior: 'smooth'
+    });
+}
+
+function initScrollNavigation() {
+    const scrollToTopBtn = document.getElementById('scrollToTopBtn');
+    const scrollToBottomBtn = document.getElementById('scrollToBottomBtn');
+
+    function checkScrollPositions() {
+        const scrollY = window.scrollY;
+        const totalHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+        const viewportHeight = window.innerHeight;
+        const distanceToBottom = totalHeight - viewportHeight - scrollY;
+
+        // Show 'Scroll to Top' when scrolled down at least 250px
+        if (scrollToTopBtn) {
+            if (scrollY > 250) {
+                scrollToTopBtn.classList.add('visible');
+            } else {
+                scrollToTopBtn.classList.remove('visible');
+            }
+        }
+
+        // Show 'Scroll to Bottom' when page has scrollable content and we're not near the bottom (> 200px away)
+        if (scrollToBottomBtn) {
+            if (totalHeight > viewportHeight + 150 && distanceToBottom > 200) {
+                scrollToBottomBtn.classList.add('visible');
+            } else {
+                scrollToBottomBtn.classList.remove('visible');
+            }
+        }
+    }
+
+    window.addEventListener('scroll', checkScrollPositions, { passive: true });
+    window.addEventListener('resize', checkScrollPositions, { passive: true });
+
+    if (scrollToTopBtn) {
+        scrollToTopBtn.addEventListener('click', scrollToTop);
+    }
+    if (scrollToBottomBtn) {
+        scrollToBottomBtn.addEventListener('click', scrollToBottom);
+    }
+
+    setTimeout(checkScrollPositions, 300);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    initScrollNavigation();
 });
