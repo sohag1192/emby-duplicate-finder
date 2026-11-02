@@ -1299,27 +1299,6 @@ function copyFolderDeleteCmd() {
     });
 }
 
-function downloadFolderDeleteBat(customDirPath = null) {
-    const dir = customDirPath || pendingFolderDelete?.dirPath;
-    if (!dir) return;
-
-    const isWindows = dir.includes('\\');
-    const content = isWindows
-        ? `@echo off\r\nchcp 65001 > nul\r\necho ========================================================\r\necho Deleting duplicate directory folder from disk:\r\necho "${dir}"\r\necho ========================================================\r\nrd /s /q "${dir}"\r\nif not exist "${dir}" (\r\n    echo.\r\n    echo [SUCCESS] Directory was permanently deleted from your disk!\r\n) else (\r\n    echo.\r\n    echo [NOTICE] Folder could not be removed. Please make sure no files inside are open.\r\n)\r\necho.\r\npause\r\n`
-        : `#!/bin/bash\nrm -rf "${dir}"\necho "Folder removed from disk!"\n`;
-
-    const blob = new Blob([content], { type: 'application/x-bat' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `delete_folder.bat`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    showToast('⚡ Downloaded delete_folder.bat! Double-click it to remove the directory from disk.', 'success');
-}
-
 function closeFolderDeleteModal() {
     document.getElementById('folder-delete-modal').classList.add('hidden');
     pendingFolderDelete = null;
@@ -1464,9 +1443,6 @@ async function executeDeleteFolder() {
             try {
                 await embyFetch(`/emby/Library/Refresh?api_key=${appState.apiKey}`, { method: 'POST' });
             } catch (e) {}
-
-            // Auto-trigger .bat download so Windows removes the physical directory in 1 click
-            downloadFolderDeleteBat(dirPath);
         }
 
         if (progressBar) progressBar.style.width = '100%';
@@ -1487,9 +1463,9 @@ async function executeDeleteFolder() {
         appState.selectedFiles.clear();
 
         if (errorCount === 0) {
-            showToast(`🎉 Successfully deleted all ${completed} items in folder! Downloaded .bat to wipe directory from disk.`, 'success');
+            showToast(`🎉 Successfully deleted all ${completed} items in folder!`, 'success');
         } else {
-            showToast(`Folder delete finished: ${completed} deleted, ${errorCount} failed. Use downloaded .bat to force-delete folder.`, 'warning');
+            showToast(`Folder delete finished: ${completed} deleted, ${errorCount} failed.`, 'warning');
         }
 
     } catch (fatalErr) {
@@ -1788,46 +1764,6 @@ function copyBatchFolderCmd() {
     });
 }
 
-function downloadBatchFoldersDeleteBat() {
-    const folders = getUniqueDuplicateFolders();
-    const selectedList = folders.filter(f => selectedBatchFolders.has(f.dirPath));
-    if (selectedList.length === 0) {
-        showToast('Please select at least one folder first.', 'warning');
-        return;
-    }
-
-    const isWindows = selectedList.some(f => f.dirPath.includes('\\'));
-    let content = '';
-
-    if (isWindows) {
-        content = `@echo off\r\nchcp 65001 > nul\r\ntitle Emby Duplicate Folders Cleaner\r\necho ========================================================\r\necho Permanently deleting ${selectedList.length} duplicate folders from disk...\r\necho ========================================================\r\necho.\r\n`;
-        selectedList.forEach(item => {
-            content += `echo Removing: "${item.dirPath}"\r\n`;
-            content += `rd /s /q "${item.dirPath}"\r\n`;
-        });
-        content += `\r\necho.\r\necho ========================================================\r\necho [SUCCESS] Batch directory cleanup finished!\r\necho ========================================================\r\necho.\r\npause\r\n`;
-    } else {
-        content = `#!/bin/bash\necho "Permanently deleting ${selectedList.length} duplicate folders..."\n`;
-        selectedList.forEach(item => {
-            content += `rm -rf "${item.dirPath}"\n`;
-        });
-        content += `echo "Batch cleanup finished!"\n`;
-    }
-
-    const filename = isWindows ? 'batch_delete_folders.bat' : 'batch_delete_folders.sh';
-    const mime = isWindows ? 'application/x-bat' : 'application/x-sh';
-    const blob = new Blob([content], { type: mime });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    showToast(`⚡ Downloaded ${filename}! Double-click it to remove all ${selectedList.length} folders from disk.`, 'success');
-}
-
 function closeBatchFolderDeleteModal() {
     const modal = document.getElementById('batch-folder-delete-modal');
     if (modal) modal.classList.add('hidden');
@@ -1962,9 +1898,6 @@ async function executeBatchDeleteFolders() {
             try {
                 await embyFetch(`/emby/Library/Refresh?api_key=${appState.apiKey}`, { method: 'POST' });
             } catch (e) {}
-
-            // Auto-trigger batch .bat download to wipe all selected folders from Windows disk
-            downloadBatchFoldersDeleteBat();
         }
 
         if (progressBar) progressBar.style.width = '100%';
@@ -1986,9 +1919,9 @@ async function executeBatchDeleteFolders() {
         selectedBatchFolders.clear();
 
         if (errorCount === 0) {
-            showToast(`🎉 Successfully deleted all ${completed} items across ${selectedList.length} folders! Downloaded batch .bat to wipe directories from disk.`, 'success');
+            showToast(`🎉 Successfully deleted all ${completed} items across ${selectedList.length} folders!`, 'success');
         } else {
-            showToast(`Batch folder delete finished: ${completed} deleted, ${errorCount} failed. Use downloaded batch .bat to force-delete folders.`, 'warning');
+            showToast(`Batch folder delete finished: ${completed} deleted, ${errorCount} failed.`, 'warning');
         }
 
     } catch (fatalErr) {

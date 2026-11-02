@@ -330,13 +330,10 @@
                 </div>
 
                 <div class="cmd-copy-box">
-                    <span>Quick CMD command / script to permanently delete directory from Windows hard disk:</span>
+                    <span>Quick CMD command to force-remove directory from Windows / OS:</span>
                     <div class="cmd-row">
                         <code id="folderDeleteCmdText"></code>
-                        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                            <button type="button" class="btn-secondary btn-sm" onclick="copyFolderDeleteCmd()">📋 Copy Command</button>
-                            <button type="button" class="btn-warning btn-sm" onclick="downloadFolderDeleteBat()" title="Download a .bat script to instantly delete this folder from Windows disk">⚡ Download .BAT</button>
-                        </div>
+                        <button type="button" class="btn-secondary btn-sm" onclick="copyFolderDeleteCmd()">📋 Copy Command</button>
                     </div>
                 </div>
 
@@ -433,10 +430,7 @@
                     <span>Quick CMD commands to force-remove all selected directories from Windows:</span>
                     <div class="cmd-row" style="align-items: flex-start;">
                         <textarea id="batchFolderCmdText" readonly style="flex: 1; background: transparent; border: none; color: #38bdf8; font-family: var(--font-mono); font-size: 11px; resize: vertical; min-height: 52px; outline: none;"></textarea>
-                        <div style="display: flex; flex-direction: column; gap: 6px;">
-                            <button type="button" class="btn-secondary btn-sm" onclick="copyBatchFolderCmd()">📋 Copy Batch CMD</button>
-                            <button type="button" class="btn-warning btn-sm" onclick="downloadBatchFoldersDeleteBat()" title="Download a .bat script to delete all selected folders from Windows disk">⚡ Download Batch .BAT</button>
-                        </div>
+                        <button type="button" class="btn-secondary btn-sm" onclick="copyBatchFolderCmd()">📋 Copy Batch CMD</button>
                     </div>
                 </div>
 
