@@ -7,8 +7,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/sohag1192/emby-duplicate-finder">
-    <img src="https://komarev.com/ghpvc/?username=sohag1192-emby-duplicate-finder&label=Visitor+Count&color=06b6d4&style=flat-square" alt="Visitor Count" />
+  <a href="https://hits.sh/github.com/sohag1192/emby-duplicate-finder/">
+    <img src="https://hits.sh/github.com/sohag1192/emby-duplicate-finder.svg?view=today-total&style=flat-square&label=Daily%20%2F%20Total%20Hits&color=06b6d4" alt="Daily & Total Hits" />
   </a>
   <a href="https://github.com/sohag1192/emby-duplicate-finder/stargazers">
     <img src="https://img.shields.io/github/stars/sohag1192/emby-duplicate-finder?style=flat-square&color=yellow" alt="Stars" />
@@ -131,15 +131,37 @@ To allow deleting duplicate files directly from this web tool:
 
 ---
 
-## ⭐ Star History
+## 🔗 Related Projects
 
-<a href="https://star-history.com/#sohag1192/emby-duplicate-finder&Date">
+- [🎬 Emby to Telegram Notifier](https://github.com/sohag1192/emby-to-telegram) — An automated background service that monitors your Emby Media Server and sends rich media cards with action buttons to Telegram.
+
+---
+
+## 📊 Star History & Visitor Count
+
+### 👀 Daily & Total Hits
+[![Daily & Total Hits](https://hits.sh/github.com/sohag1192/emby-duplicate-finder.svg?view=today-total&style=for-the-badge&label=Daily%20%2F%20Total%20Hits&color=007ec6)](https://hits.sh/github.com/sohag1192/emby-duplicate-finder/)
+
+### ⭐ Star History
+<a href="https://star-history.com/#sohag1192/emby-duplicate-finder&sohag1192/emby-to-telegram&Date">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=sohag1192/emby-duplicate-finder&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=sohag1192/emby-duplicate-finder&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=sohag1192/emby-duplicate-finder&type=Date" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=sohag1192/emby-duplicate-finder,sohag1192/emby-to-telegram&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=sohag1192/emby-duplicate-finder,sohag1192/emby-to-telegram&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=sohag1192/emby-duplicate-finder,sohag1192/emby-to-telegram&type=Date" />
  </picture>
 </a>
+
+---
+
+## 🤝 Contributing & Contact
+
+Contributions, bug reports, feature suggestions, and pull requests are welcome!  
+If you find a bug or have an idea to improve the UI, feel free to open an [Issue](https://github.com/sohag1192/emby-duplicate-finder/issues) or submit a [Pull Request](https://github.com/sohag1192/emby-duplicate-finder/pulls).
+
+<p align="center">
+  📫 <b>Email:</b> <a href="mailto:sohag1192@gmail.com">sohag1192@gmail.com</a><br/>
+  💬 <b>Telegram:</b> <a href="https://t.me/Md_Sohag_Rana">@Md_Sohag_Rana</a>
+</p>
 
 ---
 
