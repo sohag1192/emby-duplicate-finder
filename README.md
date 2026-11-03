@@ -134,6 +134,7 @@ To allow deleting duplicate files directly from this web tool:
 ## 🔗 Related Projects
 
 - [🎬 Emby to Telegram Notifier](https://github.com/sohag1192/emby-to-telegram) — An automated background service that monitors your Emby Media Server and sends rich media cards with action buttons to Telegram.
+- [🚀 Emby & Jellyfin Home Swiper UI](https://github.com/sohag1192/Emby-Home-Swiper-UI) — Transform your Emby and Jellyfin home screen into a cinematic media showcase with dynamic banners, ratings, external player launching, and animated announcements.
 
 ---
 
@@ -143,11 +144,11 @@ To allow deleting duplicate files directly from this web tool:
 [![Daily & Total Hits](https://hits.sh/github.com/sohag1192/emby-duplicate-finder.svg?view=today-total&style=for-the-badge&label=Daily%20%2F%20Total%20Hits&color=007ec6)](https://hits.sh/github.com/sohag1192/emby-duplicate-finder/)
 
 ### ⭐ Star History
-<a href="https://star-history.com/#sohag1192/emby-duplicate-finder&sohag1192/emby-to-telegram&Date">
+<a href="https://star-history.com/#sohag1192/emby-duplicate-finder&sohag1192/emby-to-telegram&sohag1192/Emby-Home-Swiper-UI&Date">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=sohag1192/emby-duplicate-finder,sohag1192/emby-to-telegram&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=sohag1192/emby-duplicate-finder,sohag1192/emby-to-telegram&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=sohag1192/emby-duplicate-finder,sohag1192/emby-to-telegram&type=Date" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=sohag1192/emby-duplicate-finder,sohag1192/emby-to-telegram,sohag1192/Emby-Home-Swiper-UI&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=sohag1192/emby-duplicate-finder,sohag1192/emby-to-telegram,sohag1192/Emby-Home-Swiper-UI&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=sohag1192/emby-duplicate-finder,sohag1192/emby-to-telegram,sohag1192/Emby-Home-Swiper-UI&type=Date" />
  </picture>
 </a>
 
