@@ -7,7 +7,8 @@ let appState = {
     results: [], // Array of libraries with duplicates
     pendingDelete: null,
     currentView: localStorage.getItem('emby_v1_view_mode') || 'grid', // 'grid' or 'table'
-    selectedFiles: new Set() // stores keys in format "libIdx_groupIdx_fileIdx"
+    selectedFiles: new Set(), // stores keys in format "libIdx_groupIdx_fileIdx"
+    accordionState: {} // Tracks expanded/collapsed state: libraryKey -> boolean (true=open, false=closed)
 };
 
 // Initialize on DOM load
@@ -237,7 +238,7 @@ async function findDuplicates() {
 
         appState.results = duplicateResults;
         calculateStats();
-        displayResults();
+        displayResults(false); // First scan: start from top
 
         if (duplicateResults.length > 0) {
             document.getElementById('filter-bar').classList.remove('hidden');
@@ -532,16 +533,45 @@ function findDuplicatesInTvLibrary(episodes) {
     return duplicateList;
 }
 
-// Main Display Function (Toggles Grid vs Table View)
-function displayResults() {
+// Helper to get consistent unique key for library accordion tracking
+function getLibraryKey(lib, libIdx) {
+    if (!lib) return `lib_${libIdx}`;
+    return String(lib.libraryId || lib.libraryName || `lib_${libIdx}`);
+}
+
+// Main Display Function (Toggles Grid vs Table View, with scroll & state preservation)
+function displayResults(maintainScroll = true) {
     const resultsDiv = document.getElementById('results');
     if (!resultsDiv) return;
-    resultsDiv.innerHTML = '';
+
+    if (!appState.accordionState) {
+        appState.accordionState = {};
+    }
+
+    // 1. Capture exact scroll position and container height to prevent height collapse
+    const scrollY = maintainScroll ? (window.pageYOffset || document.documentElement.scrollTop || window.scrollY || 0) : 0;
+    const prevHeight = resultsDiv.offsetHeight;
+    if (maintainScroll && prevHeight > 0) {
+        resultsDiv.style.minHeight = `${prevHeight}px`;
+    }
+
+    // 2. Remember collapsed / expanded library accordions from existing DOM before clearing
+    const existingBoxes = resultsDiv.querySelectorAll('.library-box');
+    if (existingBoxes.length > 0) {
+        appState.results.forEach((lib, idx) => {
+            const content = document.getElementById(`library-content-${idx}`);
+            if (content) {
+                const libKey = getLibraryKey(lib, idx);
+                appState.accordionState[libKey] = !content.classList.contains('hidden');
+            }
+        });
+    }
 
     // Filter out libraries that have 0 duplicates
     appState.results = appState.results.filter(lib => lib.duplicateGroups && lib.duplicateGroups.length > 0);
 
     if (appState.results.length === 0) {
+        resultsDiv.style.minHeight = '';
         resultsDiv.innerHTML = `
             <div class="card text-center" style="padding: 40px 20px;">
                 <div style="font-size: 48px; margin-bottom: 12px;">🎉</div>
@@ -558,6 +588,8 @@ function displayResults() {
         return;
     }
 
+    resultsDiv.innerHTML = '';
+
     appState.results.forEach((libraryResult, libIdx) => {
         const libraryBox = document.createElement('div');
         libraryBox.className = 'library-box';
@@ -566,6 +598,12 @@ function displayResults() {
         const isTv = libraryResult.type === 'tvshows';
         const badgeClass = isTv ? 'badge-tv' : 'badge-movie';
         const badgeLabel = isTv ? '📺 TV Series' : '🎬 Movies';
+
+        const libKey = getLibraryKey(libraryResult, libIdx);
+        // Retain saved state; default to expanded (true) if never explicitly collapsed
+        const isExpanded = appState.accordionState[libKey] !== undefined ? appState.accordionState[libKey] : true;
+        const contentHiddenClass = isExpanded ? '' : 'hidden';
+        const arrowChar = isExpanded ? '▼' : '►';
 
         libraryBox.innerHTML = `
             <div class="library-header" onclick="toggleLibraryAccordion(${libIdx})">
@@ -581,16 +619,33 @@ function displayResults() {
                     <button class="btn-secondary btn-sm" onclick="event.stopPropagation(); downloadLibraryReport(${libIdx})">
                         💾 Download Report
                     </button>
-                    <span id="accordion-arrow-${libIdx}" style="font-size: 14px; margin-left: 6px;">▼</span>
+                    <span id="accordion-arrow-${libIdx}" style="font-size: 14px; margin-left: 6px;">${arrowChar}</span>
                 </div>
             </div>
-            <div class="library-content" id="library-content-${libIdx}">
+            <div class="library-content ${contentHiddenClass}" id="library-content-${libIdx}">
                 ${appState.currentView === 'table' ? renderTableView(libraryResult.duplicateGroups, libIdx) : renderGridView(libraryResult.duplicateGroups, libIdx)}
             </div>
         `;
 
         resultsDiv.appendChild(libraryBox);
     });
+
+    // Restore search filter
+    handleSearchFilter();
+
+    // Restore scroll position seamlessly
+    if (maintainScroll && scrollY > 0) {
+        window.scrollTo({ top: scrollY, behavior: 'instant' });
+        requestAnimationFrame(() => {
+            window.scrollTo({ top: scrollY, behavior: 'instant' });
+            setTimeout(() => {
+                window.scrollTo({ top: scrollY, behavior: 'instant' });
+                resultsDiv.style.minHeight = '';
+            }, 60);
+        });
+    } else {
+        resultsDiv.style.minHeight = '';
+    }
 }
 
 // Image fallback
@@ -826,7 +881,7 @@ function renderTableView(groups, libIdx) {
                                     <span class="table-title-text">${escapeHtml(group.title)}</span>
                                     <div class="table-title-sub">
                                         ${group.year ? `<span class="table-year-text">📅 ${escapeHtml(String(group.year))}</span>` : ''}
-                                        <span class="meta-chip danger" style="padding: 2px 8px; font-size: 11px;">${group.files.length} Copies</span>
+                                        <span class="meta-chip danger" id="badge-count-${libIdx}-${groupIdx}" style="padding: 2px 8px; font-size: 11px;">${group.files.length} Copies</span>
                                     </div>
                                 </td>
                                 <td class="table-cell-files">
@@ -894,12 +949,23 @@ function renderTableView(groups, libIdx) {
 function toggleLibraryAccordion(libIdx) {
     const content = document.getElementById(`library-content-${libIdx}`);
     const arrow = document.getElementById(`accordion-arrow-${libIdx}`);
+    if (!content) return;
+
     content.classList.toggle('hidden');
-    arrow.textContent = content.classList.contains('hidden') ? '►' : '▼';
+    const isHidden = content.classList.contains('hidden');
+    if (arrow) arrow.textContent = isHidden ? '►' : '▼';
+
+    const lib = appState.results[libIdx];
+    const libKey = getLibraryKey(lib, libIdx);
+    if (!appState.accordionState) appState.accordionState = {};
+    appState.accordionState[libKey] = !isHidden;
 }
 
 function expandAllLibraries() {
-    appState.results.forEach((_, idx) => {
+    if (!appState.accordionState) appState.accordionState = {};
+    appState.results.forEach((lib, idx) => {
+        const libKey = getLibraryKey(lib, idx);
+        appState.accordionState[libKey] = true;
         const content = document.getElementById(`library-content-${idx}`);
         const arrow = document.getElementById(`accordion-arrow-${idx}`);
         if (content) content.classList.remove('hidden');
@@ -908,7 +974,10 @@ function expandAllLibraries() {
 }
 
 function collapseAllLibraries() {
-    appState.results.forEach((_, idx) => {
+    if (!appState.accordionState) appState.accordionState = {};
+    appState.results.forEach((lib, idx) => {
+        const libKey = getLibraryKey(lib, idx);
+        appState.accordionState[libKey] = false;
         const content = document.getElementById(`library-content-${idx}`);
         const arrow = document.getElementById(`accordion-arrow-${idx}`);
         if (content) content.classList.add('hidden');
@@ -992,6 +1061,101 @@ function closeDeleteModal() {
     appState.pendingDelete = null;
 }
 
+// Perform in-place DOM updates after single item delete (avoids full re-render & scroll jump)
+function applyInPlaceDeleteDOM(libIdx, groupIdx, fileIdx, groupStillHasDupes) {
+    const library = appState.results[libIdx];
+    const groupElem = document.getElementById(`group-${libIdx}-${groupIdx}`);
+
+    if (groupStillHasDupes && library && library.duplicateGroups[groupIdx]) {
+        const group = library.duplicateGroups[groupIdx];
+        const rowElem = document.getElementById(`file-${libIdx}-${groupIdx}-${fileIdx}`);
+        if (rowElem) {
+            rowElem.remove();
+        }
+
+        // Update badge count
+        const badge = document.getElementById(`badge-count-${libIdx}-${groupIdx}`);
+        if (badge) {
+            badge.textContent = `${group.files.length} Copies Found`;
+        }
+
+        // Recalculate best index
+        const bestIdx = getBestFileIndex(group.files);
+
+        // Re-index remaining file rows in this group
+        if (groupElem) {
+            const rows = groupElem.querySelectorAll('.file-row, .table-file-item');
+            rows.forEach((r, newFIdx) => {
+                r.id = `file-${libIdx}-${groupIdx}-${newFIdx}`;
+                const chk = r.querySelector('.file-checkbox');
+                if (chk) {
+                    chk.setAttribute('onchange', `toggleFileSelection(${libIdx}, ${groupIdx}, ${newFIdx}, this.checked)`);
+                }
+                const delBtn = r.querySelector('button.btn-danger');
+                if (delBtn) {
+                    delBtn.setAttribute('onclick', `promptDelete(${libIdx}, ${groupIdx}, ${newFIdx})`);
+                }
+                // Update Keep (Best) badge
+                const specs = r.querySelector('.file-specs');
+                if (specs) {
+                    const existingBest = specs.querySelector('.spec-best');
+                    if (newFIdx === bestIdx) {
+                        if (!existingBest) {
+                            const bestSpan = document.createElement('span');
+                            bestSpan.className = 'spec-badge spec-best';
+                            bestSpan.textContent = '★ Keep (Best)';
+                            specs.prepend(bestSpan);
+                        }
+                    } else if (existingBest) {
+                        existingBest.remove();
+                    }
+                }
+            });
+        }
+    } else {
+        // Group no longer has duplicate files, remove group element
+        if (groupElem) {
+            groupElem.remove();
+        }
+
+        // Update library duplicates pill
+        const pill = document.getElementById(`lib-count-pill-${libIdx}`);
+        if (pill && library) {
+            pill.textContent = `${library.count} Duplicates`;
+        }
+
+        // If library is now empty, remove its container
+        if (!library || library.duplicateGroups.length === 0) {
+            const libBox = document.getElementById(`library-box-${libIdx}`);
+            if (libBox) libBox.remove();
+        } else {
+            // Re-index subsequent groups in this library so indices match data
+            const libContent = document.getElementById(`library-content-${libIdx}`);
+            if (libContent) {
+                const groupElems = libContent.querySelectorAll('.duplicate-group, tr.group-item');
+                groupElems.forEach((gEl, newGIdx) => {
+                    gEl.id = `group-${libIdx}-${newGIdx}`;
+                    const badge = gEl.querySelector(`[id^="badge-count-"]`);
+                    if (badge) badge.id = `badge-count-${libIdx}-${newGIdx}`;
+
+                    const rows = gEl.querySelectorAll('.file-row, .table-file-item');
+                    rows.forEach((r, fIdx) => {
+                        r.id = `file-${libIdx}-${newGIdx}-${fIdx}`;
+                        const chk = r.querySelector('.file-checkbox');
+                        if (chk) {
+                            chk.setAttribute('onchange', `toggleFileSelection(${libIdx}, ${newGIdx}, ${fIdx}, this.checked)`);
+                        }
+                        const delBtn = r.querySelector('button.btn-danger');
+                        if (delBtn) {
+                            delBtn.setAttribute('onclick', `promptDelete(${libIdx}, ${newGIdx}, ${fIdx})`);
+                        }
+                    });
+                });
+            }
+        }
+    }
+}
+
 async function executeDelete() {
     if (!appState.pendingDelete) return;
 
@@ -1014,15 +1178,25 @@ async function executeDelete() {
             const group = library.duplicateGroups[groupIdx];
             group.files.splice(fileIdx, 1);
 
-            if (group.files.length <= 1) {
+            const groupStillHasDupes = group.files.length > 1;
+            if (!groupStillHasDupes) {
                 library.duplicateGroups.splice(groupIdx, 1);
             }
             library.count = library.duplicateGroups.length;
+
+            applyInPlaceDeleteDOM(libIdx, groupIdx, fileIdx, groupStillHasDupes);
         }
 
         // Clean up empty libraries and reset selections
+        const prevLibCount = appState.results.length;
         appState.results = appState.results.filter(lib => lib.duplicateGroups && lib.duplicateGroups.length > 0);
         appState.selectedFiles.clear();
+
+        if (appState.results.length === 0) {
+            displayResults(false);
+        } else if (appState.results.length < prevLibCount) {
+            displayResults(true);
+        }
 
     } catch (err) {
         console.error('Delete error:', err);
@@ -1035,7 +1209,6 @@ async function executeDelete() {
             confirmBtn.textContent = 'Delete Permanently';
         }
         calculateStats();
-        displayResults();
         handleSearchFilter();
         updateSelectionUI();
     }
@@ -1155,7 +1328,7 @@ async function executeBatchDelete() {
         closeBatchDeleteModal();
 
         calculateStats();
-        displayResults();
+        displayResults(true);
         handleSearchFilter();
         updateSelectionUI();
     }
@@ -1461,7 +1634,7 @@ async function executeDeleteFolder() {
         closeFolderDeleteModal();
 
         calculateStats();
-        displayResults();
+        displayResults(true);
         handleSearchFilter();
         updateSelectionUI();
     }
@@ -1492,7 +1665,7 @@ async function rescanLibrary(libIdx) {
         appState.selectedFiles.clear();
 
         calculateStats();
-        displayResults();
+        displayResults(true);
         handleSearchFilter();
         updateSelectionUI();
 
@@ -1917,7 +2090,7 @@ async function executeBatchDeleteFolders() {
         closeBatchFolderDeleteModal();
 
         if (typeof calculateStats === 'function') calculateStats();
-        displayResults();
+        displayResults(true);
         handleSearchFilter();
         updateSelectionUI();
 
