@@ -1,0 +1,106 @@
+name: Auto Release & Package
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - 'V*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag Version (e.g. v2.0.0)'
+        required: true
+        default: 'v2.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build & Publish Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine Release Tag
+        id: vars
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag_name }}"
+          else
+            TAG="${{ github.ref_name }}"
+          fi
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+
+      - name: Package Web Application into ZIP
+        run: |
+          TAG="${{ steps.vars.outputs.tag }}"
+          echo "Packaging Emby Duplicate Finder for tag: ${TAG}"
+
+          # Create a clean release staging directory
+          mkdir -p dist/emby-duplicate-finder
+
+          # Copy core application files and directories
+          cp -r index.html script.js styles.css favicon.svg robots.txt sitemap.xml README.md LICENSE dist/emby-duplicate-finder/
+          cp -r img dist/emby-duplicate-finder/
+          cp -r v1 dist/emby-duplicate-finder/
+
+          # Package constant-named ZIP (for README static latest download links)
+          cd dist
+          zip -r ../emby-duplicate-finder.zip emby-duplicate-finder
+          # Package version-tagged ZIP
+          cp ../emby-duplicate-finder.zip ../emby-duplicate-finder-${TAG}.zip
+          cd ..
+
+          ls -lh emby-duplicate-finder*.zip
+
+      - name: Generate Changelog & Release Notes
+        id: notes
+        run: |
+          TAG="${{ steps.vars.outputs.tag }}"
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+          cat << 'EOF' > release_notes.md
+          ## 🎬 Emby Duplicate Finder ${{ steps.vars.outputs.tag }}
+
+          Automated media library cleanup and duplicate resolution tool for **Emby Media Server**.
+
+          ### 📦 Download Packages
+          - 🚀 **[Download emby-duplicate-finder.zip](https://github.com/${{ github.repository }}/releases/download/${{ steps.vars.outputs.tag }}/emby-duplicate-finder.zip)** *(Latest All-in-One Package)*
+          - 🏷️ **[Download emby-duplicate-finder-${{ steps.vars.outputs.tag }}.zip](https://github.com/${{ github.repository }}/releases/download/${{ steps.vars.outputs.tag }}/emby-duplicate-finder-${{ steps.vars.outputs.tag }}.zip)**
+          - 🌐 **[Live Web App (No Installation)](https://sohag1192.github.io/emby-duplicate-finder/)**
+
+          ### 🛠️ How to Run
+          1. Download and extract **`emby-duplicate-finder.zip`**.
+          2. Double-click **`index.html`** (or **`v1/index.html`** for Pro view) in any modern browser.
+          3. Enter your Emby Server URL and API Key to scan and clean duplicate media!
+
+          ---
+
+          EOF
+
+          if [ -n "$PREV_TAG" ]; then
+            echo "### 📝 Commits since ${PREV_TAG}:" >> release_notes.md
+            git log --pretty=format:"* %s ([%h](https://github.com/${{ github.repository }}/commit/%H))" ${PREV_TAG}..HEAD >> release_notes.md
+          else
+            echo "### 📝 Recent Changes:" >> release_notes.md
+            git log --pretty=format:"* %s ([%h](https://github.com/${{ github.repository }}/commit/%H))" -n 15 >> release_notes.md
+          fi
+          echo "" >> release_notes.md
+
+      - name: Publish Official GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.vars.outputs.tag }}
+          name: Emby Duplicate Finder ${{ steps.vars.outputs.tag }}
+          body_path: release_notes.md
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            emby-duplicate-finder.zip
+            emby-duplicate-finder-${{ steps.vars.outputs.tag }}.zip

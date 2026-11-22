@@ -4,9 +4,18 @@
   <a href="https://sohag1192.github.io/emby-duplicate-finder/">
     <img src="https://img.shields.io/badge/🚀%20Live%20Demo-Try%20Web%20App-06b6d4?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Live Demo" />
   </a>
+  <a href="https://github.com/sohag1192/emby-duplicate-finder/releases/latest/download/emby-duplicate-finder.zip">
+    <img src="https://img.shields.io/badge/📦%20Download-Latest%20Release%20(ZIP)-2563eb?style=for-the-badge&logo=github&logoColor=white" alt="Download ZIP" />
+  </a>
+  <a href="https://github.com/sohag1192/emby-duplicate-finder/releases">
+    <img src="https://img.shields.io/github/v/release/sohag1192/emby-duplicate-finder?style=for-the-badge&logo=github&color=7c3aed&label=Release" alt="Latest Release" />
+  </a>
 </p>
 
 <p align="center">
+  <a href="https://github.com/sohag1192/emby-duplicate-finder/releases">
+    <img src="https://img.shields.io/github/downloads/sohag1192/emby-duplicate-finder/total?style=flat-square&color=blueviolet&logo=github" alt="Total Downloads" />
+  </a>
   <a href="https://hits.sh/github.com/sohag1192/emby-duplicate-finder/">
     <img src="https://hits.sh/github.com/sohag1192/emby-duplicate-finder.svg?view=today-total&style=flat-square&label=Daily%20%2F%20Total%20Hits&color=06b6d4" alt="Daily & Total Hits" />
   </a>
@@ -25,13 +34,30 @@ An ultra-modern, high-performance web tool designed for **Emby Media Server** to
 
 ---
 
-## 🌟 Live Demos
+## 🌟 Live Demos & Web App
 
 You can try the web application directly in your browser without any installation:
 - 🚀 **Pro Edition (Interactive Table & Grid Views + Storage Stats):**  
   👉 **[https://sohag1192.github.io/emby-duplicate-finder/v1/](https://sohag1192.github.io/emby-duplicate-finder/v1/)**
 - 🎬 **Classic Edition:**  
   👉 **[https://sohag1192.github.io/emby-duplicate-finder/](https://sohag1192.github.io/emby-duplicate-finder/)**
+
+---
+
+## 📦 Download ZIP & Offline Access
+
+No web server or dependencies required! You can download and run the web app completely offline:
+
+| Package | Download Link | Notes |
+| :--- | :--- | :--- |
+| 📦 **Latest Release (ZIP)** | [**Download emby-duplicate-finder.zip**](https://github.com/sohag1192/emby-duplicate-finder/releases/latest/download/emby-duplicate-finder.zip) | Pre-packaged official release bundle |
+| 🗂️ **Source Code (ZIP)** | [**Download Source Code (ZIP)**](https://github.com/sohag1192/emby-duplicate-finder/archive/refs/heads/main.zip) | Latest repository snapshot |
+| 🌐 **Live Web Demo** | [**Open in Browser**](https://sohag1192.github.io/emby-duplicate-finder/) | Instant online access |
+
+### 🛠️ How to Run Locally:
+1. Download [**emby-duplicate-finder.zip**](https://github.com/sohag1192/emby-duplicate-finder/releases/latest/download/emby-duplicate-finder.zip).
+2. Extract the `.zip` archive to any directory on your computer.
+3. Double-click **`index.html`** (Classic Edition) or **`v1/index.html`** (Pro Edition) in any modern browser!
 
 ---
 
